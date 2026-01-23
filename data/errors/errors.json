@@ -1,0 +1,92 @@
+[
+  {
+    "user_id": 8425074393,
+    "error": "Client error '404 Not Found' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamgenerateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+    "traceback": "<traceback object at 0x7c8aec703dc0>",
+    "timestamp": "2026-01-22T23:25:04.283721"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x7dd073cb0f80>",
+    "timestamp": "2026-01-22T23:28:44.409570"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x716bff100780>",
+    "timestamp": "2026-01-22T23:31:02.672230"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0&alt=sse'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x78efb85f0280>",
+    "timestamp": "2026-01-22T23:32:28.256736"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x77d96f480b80>",
+    "timestamp": "2026-01-22T23:38:01.314645"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x77d96f3b7bc0>",
+    "timestamp": "2026-01-22T23:43:27.501108"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyAoCxYlyfzS8lKx46jIGEPz0rG04BLonM0'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x77d96f3b4a40>",
+    "timestamp": "2026-01-22T23:44:54.449736"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyDrMeSJqnCCfCgWF1XbLcW--47ESke6eKU'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x783e28ecdfc0>",
+    "timestamp": "2026-01-22T23:46:20.667045"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyDrMeSJqnCCfCgWF1XbLcW--47ESke6eKU'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x7218320d7640>",
+    "timestamp": "2026-01-22T23:56:40.179992"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyDrMeSJqnCCfCgWF1XbLcW--47ESke6eKU'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x754eb2434dc0>",
+    "timestamp": "2026-01-22T23:59:10.286598"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Gemini API Error 400: [{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid JSON payload received. Unknown name \\\"harassment\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"hate_speech\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"sexually_explicit\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"dangerous_content\\\" at 'safety_settings': Cannot find field.\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"harassment\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"hate_speech\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"sexually_explicit\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"dangerous_content\\\" at 'safety_settings': Cannot find field.\"\n          }\n        ]\n      }\n    ]\n  }\n}\n]",
+    "traceback": "<traceback object at 0x7f4c15a05e80>",
+    "timestamp": "2026-01-23T00:04:30.809480"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Client error '400 Bad Request' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=AIzaSyDrMeSJqnCCfCgWF1XbLcW--47ESke6eKU'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400",
+    "traceback": "<traceback object at 0x754eb25caa40>",
+    "timestamp": "2026-01-23T00:11:32.977690"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Gemini API Error 400: [{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid JSON payload received. Unknown name \\\"harassment\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"hate_speech\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"sexually_explicit\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"dangerous_content\\\" at 'safety_settings': Cannot find field.\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"harassment\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"hate_speech\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"sexually_explicit\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"dangerous_content\\\" at 'safety_settings': Cannot find field.\"\n          }\n        ]\n      }\n    ]\n  }\n}\n]",
+    "traceback": "<traceback object at 0x749f48500d80>",
+    "timestamp": "2026-01-23T00:12:05.396720"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Gemini API Error 400: [{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Invalid JSON payload received. Unknown name \\\"harassment\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"hate_speech\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"sexually_explicit\\\" at 'safety_settings': Cannot find field.\\nInvalid JSON payload received. Unknown name \\\"dangerous_content\\\" at 'safety_settings': Cannot find field.\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.BadRequest\",\n        \"fieldViolations\": [\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"harassment\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"hate_speech\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"sexually_explicit\\\" at 'safety_settings': Cannot find field.\"\n          },\n          {\n            \"field\": \"safety_settings\",\n            \"description\": \"Invalid JSON payload received. Unknown name \\\"dangerous_content\\\" at 'safety_settings': Cannot find field.\"\n          }\n        ]\n      }\n    ]\n  }\n}\n]",
+    "traceback": "<traceback object at 0x791dfaa00d80>",
+    "timestamp": "2026-01-23T00:17:33.938804"
+  },
+  {
+    "user_id": 8425074393,
+    "error": "Can't parse entities: character '!' is reserved and must be escaped with the preceding '\\'",
+    "traceback": "<traceback object at 0x71d533b9c440>",
+    "timestamp": "2026-01-23T00:21:41.404328"
+  }
+]

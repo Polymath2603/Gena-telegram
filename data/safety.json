@@ -1,0 +1,6 @@
+{
+  "harassment": "BLOCK_MEDIUM_AND_ABOVE",
+  "hate_speech": "BLOCK_MEDIUM_AND_ABOVE",
+  "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
+  "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE"
+}
