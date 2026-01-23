@@ -1,16 +1,22 @@
+"""
+Gena - Database Manager
+SQLite database operations for user data, settings, and history
+"""
 import sqlite3
 import json
-from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict
 
+
 class DatabaseManager:
+    """Manages SQLite database operations"""
+    
     def __init__(self, db_path: str = 'gena.db'):
         self.db_path = db_path
         self.init_db()
     
     def init_db(self):
-        """Initialize database with all tables."""
+        """Initialize database with all tables"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -84,34 +90,39 @@ class DatabaseManager:
             )
         ''')
         
-        # Create indexes for faster queries
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_user_id ON message_history(user_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_created ON message_history(created_at)')
+        # Create indexes
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_history_user_id 
+            ON message_history(user_id)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_history_created 
+            ON message_history(created_at)
+        ''')
         
         conn.commit()
         conn.close()
     
     def init_user(self, user_id: int):
-        """Initialize a new user with default values."""
+        """Initialize a new user with default values"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Create user
-        cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+        cursor.execute(
+            'INSERT OR IGNORE INTO users (user_id) VALUES (?)', 
+            (user_id,)
+        )
         
-        # Create plan
         cursor.execute('''
             INSERT OR IGNORE INTO plans (user_id, plan, expiration)
             VALUES (?, 'Free', NULL)
         ''', (user_id,))
         
-        # Create settings
         cursor.execute('''
             INSERT OR IGNORE INTO settings (user_id, model, current_persona, system_instruction)
-            VALUES (?, 'gemini-2.5-flash', 'friend', ?)
-        ''', (user_id, ''))  # system_instruction will be set by app
+            VALUES (?, 'gemini-2.5-flash', 'friend', '')
+        ''', (user_id,))
         
-        # Create usage
         cursor.execute('''
             INSERT OR IGNORE INTO usage (user_id, rate_limit_minute, rate_limit_count)
             VALUES (?, '', 0)
@@ -121,13 +132,14 @@ class DatabaseManager:
         conn.close()
     
     def get_user_plan(self, user_id: int) -> str:
-        """Get user's current plan."""
+        """Get user's current plan"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('''
-            SELECT plan, expiration FROM plans WHERE user_id = ?
-        ''', (user_id,))
+        cursor.execute(
+            'SELECT plan, expiration FROM plans WHERE user_id = ?',
+            (user_id,)
+        )
         
         result = cursor.fetchone()
         conn.close()
@@ -138,7 +150,7 @@ class DatabaseManager:
         
         plan, expiration = result
         
-        # Check if plan expired
+        # Check expiration
         if expiration:
             exp_time = datetime.fromisoformat(expiration)
             if exp_time < datetime.now():
@@ -148,7 +160,7 @@ class DatabaseManager:
         return plan
     
     def set_user_plan(self, user_id: int, plan: str, expiration: Optional[str] = None):
-        """Set user's plan."""
+        """Set user's plan"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -161,12 +173,13 @@ class DatabaseManager:
         conn.close()
     
     def get_settings(self, user_id: int) -> Dict:
-        """Get user's settings."""
+        """Get user's settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT model, current_persona, system_instruction FROM settings WHERE user_id = ?
+            SELECT model, current_persona, system_instruction 
+            FROM settings WHERE user_id = ?
         ''', (user_id,))
         
         result = cursor.fetchone()
@@ -188,11 +201,10 @@ class DatabaseManager:
         }
     
     def update_settings(self, user_id: int, **kwargs):
-        """Update user's settings."""
+        """Update user's settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Map kwargs keys to database columns
         update_map = {
             'model': 'model',
             'current_persona': 'current_persona',
@@ -201,6 +213,7 @@ class DatabaseManager:
         
         updates = []
         values = []
+        
         for key, value in kwargs.items():
             if key in update_map:
                 updates.append(f"{update_map[key]} = ?")
@@ -208,14 +221,18 @@ class DatabaseManager:
         
         if updates:
             values.append(user_id)
-            query = f"UPDATE settings SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+            query = f'''
+                UPDATE settings 
+                SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP 
+                WHERE user_id = ?
+            '''
             cursor.execute(query, values)
             conn.commit()
         
         conn.close()
     
     def add_to_history(self, user_id: int, user_message: str, bot_response: str):
-        """Add a message pair to history."""
+        """Add a message pair to history"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -228,12 +245,13 @@ class DatabaseManager:
         conn.close()
     
     def get_history(self, user_id: int, limit: int = 100) -> List[Dict]:
-        """Get user's message history."""
+        """Get user's message history"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT user_message, bot_response, created_at FROM message_history
+            SELECT user_message, bot_response, created_at 
+            FROM message_history
             WHERE user_id = ?
             ORDER BY created_at DESC
             LIMIT ?
@@ -253,22 +271,26 @@ class DatabaseManager:
         return history
     
     def clear_history(self, user_id: int):
-        """Clear user's message history."""
+        """Clear user's message history"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('DELETE FROM message_history WHERE user_id = ?', (user_id,))
+        cursor.execute(
+            'DELETE FROM message_history WHERE user_id = ?',
+            (user_id,)
+        )
         
         conn.commit()
         conn.close()
     
     def get_usage(self, user_id: int) -> Dict:
-        """Get user's usage stats."""
+        """Get user's usage stats"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT rate_limit_minute, rate_limit_count, image_limit_count, image_limit_reset
+            SELECT rate_limit_minute, rate_limit_count, 
+                   image_limit_count, image_limit_reset
             FROM usage WHERE user_id = ?
         ''', (user_id,))
         
@@ -288,9 +310,15 @@ class DatabaseManager:
             'imageLimit': {'count': image_count, 'resetTime': image_reset or ''}
         }
     
-    def update_usage(self, user_id: int, rate_minute: str = None, rate_count: int = None, 
-                    image_count: int = None, image_reset: str = None):
-        """Update user's usage stats."""
+    def update_usage(
+        self, 
+        user_id: int, 
+        rate_minute: str = None, 
+        rate_count: int = None, 
+        image_count: int = None, 
+        image_reset: str = None
+    ):
+        """Update user's usage stats"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -313,14 +341,14 @@ class DatabaseManager:
         if updates:
             updates.append('updated_at = CURRENT_TIMESTAMP')
             values.append(user_id)
-            query = f"UPDATE usage SET {', '.join(updates)} WHERE user_id = ?"
+            query = f'UPDATE usage SET {", ".join(updates)} WHERE user_id = ?'
             cursor.execute(query, values)
             conn.commit()
         
         conn.close()
     
     def get_safety_settings(self) -> List[Dict]:
-        """Get global safety settings."""
+        """Get global safety settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -337,87 +365,18 @@ class DatabaseManager:
             return []
     
     def set_safety_settings(self, settings: List[Dict]):
-        """Update global safety settings."""
+        """Update global safety settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         settings_json = json.dumps(settings)
         
-        # Insert or update (ensure only one row)
         cursor.execute('''
             INSERT INTO safety_settings (id, settings) VALUES (1, ?)
-            ON CONFLICT(id) DO UPDATE SET settings = excluded.settings, updated_at = CURRENT_TIMESTAMP
+            ON CONFLICT(id) DO UPDATE SET 
+                settings = excluded.settings, 
+                updated_at = CURRENT_TIMESTAMP
         ''', (settings_json,))
         
         conn.commit()
         conn.close()
-    
-    def migrate_from_json(self, json_dir: Path):
-        """Migrate data from JSON files to database."""
-        users_dir = json_dir / 'data' / 'users'
-        
-        # Check for migration marker file
-        migration_marker = json_dir / '.migration_complete'
-        if migration_marker.exists():
-            return
-        
-        # Migrate safety settings if they exist
-        safety_file = json_dir / 'data' / 'safety.json'
-        if safety_file.exists():
-            try:
-                with open(safety_file, 'r') as f:
-                    safety_settings = json.load(f)
-                    self.set_safety_settings(safety_settings)
-                    print(f"✅ Safety settings migrated to database")
-            except Exception as e:
-                print(f"⚠️ Could not migrate safety.json: {e}")
-        
-        # Check if users directory exists
-        if not users_dir.exists():
-            migration_marker.touch()
-            return
-        
-        for user_dir in users_dir.iterdir():
-            if not user_dir.is_dir():
-                continue
-            
-            try:
-                user_id = int(user_dir.name)
-            except ValueError:
-                continue
-            
-            print(f"Migrating user {user_id}...")
-            
-            # Initialize user
-            self.init_user(user_id)
-            
-            # Migrate plan
-            plan_file = user_dir / 'plan.json'
-            if plan_file.exists():
-                with open(plan_file, 'r') as f:
-                    plan_data = json.load(f)
-                    self.set_user_plan(user_id, plan_data.get('plan', 'Free'), 
-                                     plan_data.get('expiration'))
-            
-            # Migrate settings
-            settings_file = user_dir / 'settings.json'
-            if settings_file.exists():
-                with open(settings_file, 'r') as f:
-                    settings = json.load(f)
-                    self.update_settings(user_id, **settings)
-            
-            # Migrate history
-            history_file = user_dir / 'history.json'
-            if history_file.exists():
-                with open(history_file, 'r') as f:
-                    history = json.load(f)
-                    for entry in history:
-                        if isinstance(entry, dict) and 'user' in entry and 'bot' in entry:
-                            self.add_to_history(user_id, entry['user'], entry['bot'])
-            
-            print(f"✅ User {user_id} migrated successfully")
-        
-        # Create migration marker to skip this on next restart
-        migration_marker = json_dir / '.migration_complete'
-        migration_marker.touch()
-        print("✅ Migration complete! Old JSON files can be safely deleted.")

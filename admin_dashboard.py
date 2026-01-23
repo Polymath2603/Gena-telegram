@@ -1,34 +1,37 @@
-"""Admin dashboard and analytics for Gena bot."""
+"""
+Admin dashboard and analytics for Gena bot
+"""
 from database import DatabaseManager
 from datetime import datetime, timedelta
 from pathlib import Path
 import json
+import sqlite3
+
 
 class AdminDashboard:
-    """Admin dashboard for monitoring bot usage and analytics."""
+    """Admin dashboard for monitoring bot usage and analytics"""
     
     def __init__(self, db: DatabaseManager):
         self.db = db
         self.data_dir = Path.cwd() / 'data'
     
     def get_user_stats(self) -> dict:
-        """Get statistics about bot users."""
-        import sqlite3
+        """Get statistics about bot users"""
         conn = sqlite3.connect(self.db.db_path)
         cursor = conn.cursor()
         
-        # Count total users
+        # Total users
         cursor.execute('SELECT COUNT(*) FROM users')
         total_users = cursor.fetchone()[0]
         
-        # Count by plan
+        # Plan distribution
         cursor.execute('''
             SELECT plan, COUNT(*) as count FROM plans
             GROUP BY plan
         ''')
         plan_distribution = dict(cursor.fetchall())
         
-        # Count messages
+        # Total messages
         cursor.execute('SELECT COUNT(*) FROM message_history')
         total_messages = cursor.fetchone()[0]
         
@@ -50,9 +53,8 @@ class AdminDashboard:
         }
     
     def get_popular_personas(self) -> dict:
-        """Get which personas are most popular."""
-        conn_import = __import__('sqlite3')
-        conn = conn_import.connect(self.db.db_path)
+        """Get which personas are most popular"""
+        conn = sqlite3.connect(self.db.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -67,9 +69,8 @@ class AdminDashboard:
         return personas
     
     def get_daily_activity(self, days: int = 7) -> dict:
-        """Get daily message activity for the last N days."""
-        conn_import = __import__('sqlite3')
-        conn = conn_import.connect(self.db.db_path)
+        """Get daily message activity for the last N days"""
+        conn = sqlite3.connect(self.db.db_path)
         cursor = conn.cursor()
         
         start_date = (datetime.now() - timedelta(days=days)).date()
@@ -88,9 +89,8 @@ class AdminDashboard:
         return activity
     
     def get_top_users(self, limit: int = 10) -> list:
-        """Get most active users."""
-        conn_import = __import__('sqlite3')
-        conn = conn_import.connect(self.db.db_path)
+        """Get most active users"""
+        conn = sqlite3.connect(self.db.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -110,7 +110,7 @@ class AdminDashboard:
         return top_users
     
     def get_error_log(self) -> list:
-        """Get recent errors from error log."""
+        """Get recent errors from error log"""
         error_file = self.data_dir / 'errors' / 'errors.json'
         
         if not error_file.exists():
@@ -124,7 +124,7 @@ class AdminDashboard:
             return []
     
     def generate_report(self) -> str:
-        """Generate a full admin report."""
+        """Generate a full admin report"""
         stats = self.get_user_stats()
         personas = self.get_popular_personas()
         activity = self.get_daily_activity(7)
@@ -132,8 +132,8 @@ class AdminDashboard:
         
         report = f"""
 ╔════════════════════════════════════════╗
-║        GENA BOT - ADMIN REPORT          ║
-║        {datetime.now().strftime('%Y-%m-%d %H:%M')}          ║
+║        GENA BOT - ADMIN REPORT         ║
+║        {datetime.now().strftime('%Y-%m-%d %H:%M')}                 ║
 ╚════════════════════════════════════════╝
 
 📊 USER STATISTICS
@@ -148,12 +148,15 @@ class AdminDashboard:
 
 👤 TOP PERSONAS
 """
-        for idx, (persona, count) in enumerate(sorted(personas.items(), key=lambda x: x[1], reverse=True)[:5], 1):
+        for idx, (persona, count) in enumerate(
+            sorted(personas.items(), key=lambda x: x[1], reverse=True)[:5], 
+            1
+        ):
             report += f"├── {idx}. {persona}: {count} users\n"
         
         report += "\n📈 7-DAY ACTIVITY\n"
         for date, count in sorted(activity.items())[-7:]:
-            bar = "█" * (count // 10)
+            bar = "█" * min(count // 10, 50)  # Max 50 chars
             report += f"├── {date}: {bar} ({count} msgs)\n"
         
         report += "\n🏆 TOP 5 USERS\n"
@@ -163,7 +166,7 @@ class AdminDashboard:
         return report
     
     def export_analytics(self, filepath: str) -> bool:
-        """Export analytics to JSON file."""
+        """Export analytics to JSON file"""
         try:
             analytics = {
                 'timestamp': datetime.now().isoformat(),

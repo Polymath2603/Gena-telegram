@@ -1,4 +1,4 @@
-python-telegram-bot==20.6
+python-telegram-bot==20.7
 python-dotenv==1.0.0
-httpx==0.25.1
+httpx==0.25.2
 aiofiles==23.2.1
