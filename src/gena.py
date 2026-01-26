@@ -104,7 +104,7 @@ DEFAULT_SAFETY_SETTINGS = [
 class GenaCore:
     """Core business logic for Gena bot"""
     
-    def __init__(self, db_path: str = 'gena.db'):
+    def __init__(self, db_path: str = 'data/database.db'):
         self.db = DatabaseManager(db_path)
         self._initialize_safety_settings()
     

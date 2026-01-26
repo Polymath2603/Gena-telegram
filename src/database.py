@@ -11,7 +11,7 @@ from typing import Optional, List, Dict
 class DatabaseManager:
     """Manages SQLite database operations"""
     
-    def __init__(self, db_path: str = 'gena.db'):
+    def __init__(self, db_path: str = 'data/database.db'):
         self.db_path = db_path
         self.init_db()
     
