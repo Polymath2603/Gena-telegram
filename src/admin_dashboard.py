@@ -32,12 +32,12 @@ class AdminDashboard:
         plan_distribution = dict(cursor.fetchall())
         
         # Total messages
-        cursor.execute('SELECT COUNT(*) FROM message_history')
+        cursor.execute('SELECT COUNT(*) FROM messages')
         total_messages = cursor.fetchone()[0]
         
         # Average messages per user
         cursor.execute('''
-            SELECT user_id, COUNT(*) as count FROM message_history
+            SELECT user_id, COUNT(*) as count FROM messages
             GROUP BY user_id
         ''')
         message_counts = [row[1] for row in cursor.fetchall()]
@@ -77,7 +77,7 @@ class AdminDashboard:
         
         cursor.execute('''
             SELECT DATE(created_at) as date, COUNT(*) as count
-            FROM message_history
+            FROM messages
             WHERE DATE(created_at) >= ?
             GROUP BY DATE(created_at)
             ORDER BY date
@@ -95,7 +95,7 @@ class AdminDashboard:
         
         cursor.execute('''
             SELECT user_id, COUNT(*) as message_count
-            FROM message_history
+            FROM messages
             GROUP BY user_id
             ORDER BY message_count DESC
             LIMIT ?
@@ -156,7 +156,7 @@ class AdminDashboard:
         
         report += "\n📈 7-DAY ACTIVITY\n"
         for date, count in sorted(activity.items())[-7:]:
-            bar = "█" * min(count // 10, 50)  # Max 50 chars
+            bar = "█" * min(count // 10, 50)
             report += f"├── {date}: {bar} ({count} msgs)\n"
         
         report += "\n🏆 TOP 5 USERS\n"

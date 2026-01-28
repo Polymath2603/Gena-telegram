@@ -1,38 +1,24 @@
 """
-Gena - Telegram Bot Interface
-Handles all Telegram interactions and API calls
+Gena - Telegram Bot Interface (Fixed for compatibility)
 """
 import os
 import base64
 import mimetypes
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Union
+from typing import List, Dict
 from dotenv import load_dotenv
 import httpx
-from telegram import (
-    Update, 
-    InlineKeyboardMarkup, 
-    InlineKeyboardButton,
-    Message,
-    LabeledPrice
-)
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Message, LabeledPrice
 from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    PreCheckoutQueryHandler,
-    filters,
-    ContextTypes
+    Application, CommandHandler, MessageHandler, CallbackQueryHandler,
+    PreCheckoutQueryHandler, filters, ContextTypes
 )
 from gena import GenaCore, PLAN_PRICES, MODEL_DESCRIPTIONS
 from admin_dashboard import AdminDashboard
 
-# Load environment
 load_dotenv()
 
-# Configuration
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv('ADMIN_USER_IDS', '').split(',') if id.strip()]
@@ -40,9 +26,7 @@ ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv('ADMIN_USER_IDS', '').spli
 if not all([TELEGRAM_TOKEN, GEMINI_API_KEY]):
     raise ValueError('Missing TELEGRAM_TOKEN or GEMINI_API_KEY')
 
-# Media configuration
 ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
 class GeminiAPI:
@@ -69,7 +53,7 @@ class GeminiAPI:
                 'temperature': 0.7,
                 'topK': 40,
                 'topP': 0.95,
-                'maxOutputTokens': 1024
+                'maxOutputTokens': 2048
             }
         }
         
@@ -92,26 +76,33 @@ class GeminiAPI:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:
-                error_msg = e.response.text
-                try:
-                    error_data = e.response.json()
-                    error_msg = error_data.get('error', {}).get('message', error_msg)
-                except:
-                    pass
-                raise Exception(f"Gemini API Error ({e.response.status_code}): {error_msg}")
+                if e.response.status_code == 429:
+                    raise Exception("⏱ API rate limit reached. Please try again in a moment.")
+                elif e.response.status_code == 400:
+                    raise Exception("❌ Invalid request. Please try a different message.")
+                elif e.response.status_code == 500:
+                    raise Exception("❌ API service error. Please try again later.")
+                else:
+                    raise Exception("❌ API error. Please try again.")
 
 
 class GenaBot:
-    """Main Telegram bot class"""
+    """Main Telegram bot"""
     
     def __init__(self):
-        self.app = Application.builder().token(TELEGRAM_TOKEN).build()
+        # Build application with proper configuration
+        self.app = (
+            Application.builder()
+            .token(TELEGRAM_TOKEN)
+            .build()
+        )
         self.core = GenaCore()
         self.gemini = GeminiAPI(GEMINI_API_KEY)
+        self.media_dir = Path.cwd() / 'data' / 'media'
+        self.media_dir.mkdir(parents=True, exist_ok=True)
         self._setup_handlers()
     
     def _setup_handlers(self):
-        """Setup all command and message handlers"""
         self.app.add_handler(CommandHandler('start', self.start_command))
         self.app.add_handler(CommandHandler('help', self.help_command))
         self.app.add_handler(CommandHandler('settings', self.settings_command))
@@ -128,48 +119,43 @@ class GenaBot:
         
         self.app.add_error_handler(self.error_handler)
     
-    # Command Handlers
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command"""
         if not update.effective_user:
             return
         
-        user_id = update.effective_user.id
-        self.core.initialize_user(user_id)
-        plan = self.core.get_user_plan(user_id)
+        user = update.effective_user
+        self.core.initialize_user(user.id, user.username, user.full_name)
+        plan = self.core.get_user_plan(user.id)
         
         welcome = (
             f"👋 *Welcome to Gena!*\n\n"
             f"Your AI companion with:\n"
-            f"• Text & Image support\n"
-            f"• Multiple personalities\n"
-            f"• Conversation memory\n"
-            f"• Your plan: *{plan}*\n\n"
-            f"Use /help to see all commands"
+            f"• 💬 Text & Image support\n"
+            f"• 🎭 Multiple personalities\n"
+            f"• 💭 Conversation memory\n"
+            f"• 📋 Plan: *{plan}*\n\n"
+            f"Use /help to see all commands! ✨"
         )
         
         await update.message.reply_text(welcome, parse_mode='Markdown')
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /help command"""
         help_text = (
-            "*Gena Bot Commands*\n\n"
-            "/start - Initialize bot\n"
-            "/help - Show this message\n"
-            "/settings - View/change settings\n"
-            "/clear - Forget conversation context\n\n"
-            "*Natural Language:*\n"
-            "You can also say:\n"
+            "*🤖 Gena Bot Commands*\n\n"
+            "📍 /start - Initialize bot\n"
+            "❓ /help - Show this message\n"
+            "⚙️ /settings - View/change settings\n"
+            "🗑️ /clear - Forget conversation context\n\n"
+            "*💬 Natural Language:*\n"
             "• 'clear my context'\n"
             "• 'show settings'\n"
             "• 'change persona to advisor'\n\n"
-            "Send text or images to chat!"
+            "Send text or images to chat! 🚀"
         )
         
         await update.message.reply_text(help_text, parse_mode='Markdown')
     
     async def settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /settings command"""
         if not update.effective_user:
             return
         
@@ -177,26 +163,22 @@ class GenaBot:
         await self._show_settings_menu(update.message, user_id)
     
     async def clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /clear command"""
         if not update.effective_user:
             return
         
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Yes, forget", callback_data="clear_confirm"),
-                InlineKeyboardButton("❌ No, keep", callback_data="clear_cancel")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        keyboard = [[
+            InlineKeyboardButton("✅ Yes", callback_data="clear_confirm"),
+            InlineKeyboardButton("❌ No", callback_data="clear_cancel")
+        ]]
         
         await update.message.reply_text(
-            "⚠️ Forget conversation context?\n"
-            "(Chat history will be preserved)",
-            reply_markup=reply_markup
+            "⚠️ *Forget conversation context?*\n\n"
+            "(History preserved for reference) 📚",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
         )
     
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /admin command"""
         if not update.effective_user:
             return
         
@@ -206,21 +188,43 @@ class GenaBot:
             await update.message.reply_text("❌ Not authorized")
             return
         
-        dashboard = AdminDashboard(self.core.db)
-        report = dashboard.generate_report()
+        args = context.args if context.args else []
         
-        await update.message.reply_text(f"```\n{report}\n```", parse_mode='Markdown')
+        dashboard = AdminDashboard(self.core.db)
+        
+        if not args:
+            report = dashboard.generate_report()
+            await update.message.reply_text(f"```\n{report}\n```", parse_mode='Markdown')
+        elif args[0] == 'users':
+            count = self.core.db.get_total_users()
+            await update.message.reply_text(f"📊 Total users: *{count}*", parse_mode='Markdown')
+        elif args[0] == 'messages':
+            count = self.core.db.get_total_messages()
+            await update.message.reply_text(f"💬 Total messages: *{count}*", parse_mode='Markdown')
+        elif args[0] == 'export':
+            filepath = f"data/analytics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            if dashboard.export_analytics(filepath):
+                await update.message.reply_text(f"✅ Exported to `{filepath}`", parse_mode='Markdown')
+            else:
+                await update.message.reply_text("❌ Export failed")
+        else:
+            await update.message.reply_text(
+                "*Admin Commands:*\n"
+                "/admin - Full report\n"
+                "/admin users - User count\n"
+                "/admin messages - Message count\n"
+                "/admin export - Export analytics",
+                parse_mode='Markdown'
+            )
     
-    # Message Handler
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle incoming messages"""
         if not update.effective_user:
             return
         
-        user_id = update.effective_user.id
-        self.core.initialize_user(user_id)
+        user = update.effective_user
+        user_id = user.id
+        self.core.initialize_user(user_id, user.username, user.full_name)
         
-        # Check for NLU commands
         if update.message.text:
             intent, extra = self.core.detect_intent(update.message.text)
             
@@ -234,70 +238,68 @@ class GenaBot:
                 await self.help_command(update, context)
                 return
         
-        # Rate limit check
         if not self.core.check_rate_limit(user_id):
-            await update.message.reply_text(
-                "⏱ Rate limit exceeded. Please wait a minute."
-            )
+            await update.message.reply_text("⏱ Rate limit exceeded. Wait a minute! 😊")
             return
         
         try:
-            # Build message parts
             parts = []
-            
-            # Add text
             text = update.message.text or update.message.caption
+            media_id = None
+            
             if text:
                 parts.append({'text': text})
             
-            # Add images
             if update.message.photo:
                 if not self.core.check_image_limit(user_id):
-                    await update.message.reply_text(
-                        "🖼 Daily image limit reached. Upgrade for more!"
-                    )
+                    await update.message.reply_text("🖼 Daily image limit reached! Upgrade for more! 🚀")
                     return
                 
-                media = await self._process_images(update.message.photo)
-                parts.extend(media)
+                photo = update.message.photo[-1]
+                file = await photo.get_file()
+                
+                user_media_dir = self.media_dir / str(user_id)
+                user_media_dir.mkdir(parents=True, exist_ok=True)
+                
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                file_ext = Path(file.file_path).suffix or '.jpg'
+                file_name = f"{timestamp}_{photo.file_id[:10]}{file_ext}"
+                file_path = user_media_dir / file_name
+                
+                await file.download_to_drive(file_path)
+                
+                mime_type = mimetypes.guess_type(str(file_path))[0] or 'image/jpeg'
+                media_id = self.core.add_media(user_id, photo.file_id, str(file_path), mime_type, photo.file_size)
+                
+                file_data = await file.download_as_bytearray()
+                parts.append({
+                    'inlineData': {
+                        'data': base64.b64encode(file_data).decode(),
+                        'mimeType': mime_type
+                    }
+                })
             
             if not parts:
-                await update.message.reply_text("Please send text or an image.")
+                await update.message.reply_text("Please send text or an image! 📝")
                 return
             
-            # Get settings
             settings = self.core.get_settings(user_id)
             model = settings.get('model', 'gemini-2.5-flash')
             persona = settings.get('current_persona', 'friend')
             
-            # Get system instruction
-            system_instruction = self.core.get_persona_instruction(persona)
-            
-            # Get context history
+            system_instruction = self.core.build_system_instruction(user_id, persona)
             history = self.core.get_context_history(user_id)
             
-            # Build contents
             contents = []
             for entry in history:
-                contents.append({
-                    'role': 'user',
-                    'parts': [{'text': entry['user']}]
-                })
-                contents.append({
-                    'role': 'model',
-                    'parts': [{'text': entry['bot']}]
-                })
+                if entry['role'] == 'user':
+                    contents.append({'role': 'user', 'parts': [{'text': entry['content']}]})
+                else:
+                    contents.append({'role': 'model', 'parts': [{'text': entry['content']}]})
             
-            # Add current message
-            contents.append({
-                'role': 'user',
-                'parts': parts
-            })
+            contents.append({'role': 'user', 'parts': parts})
             
-            # Get safety settings
             safety_settings = self.core.get_safety_settings()
-            
-            # Call Gemini API
             response = await self.gemini.generate_content(
                 model=model,
                 contents=contents,
@@ -305,28 +307,31 @@ class GenaBot:
                 safety_settings=safety_settings
             )
             
-            # Extract response text
             response_text = self._extract_response_text(response)
             
             if not response_text:
-                await update.message.reply_text("❌ No response from API")
+                await update.message.reply_text("❌ No response received")
                 return
             
-            # Save to history
             user_text = text if text else "[Image]"
-            self.core.add_to_history(user_id, user_text, response_text)
+            self.core.add_message(user_id, 'user', user_text, media_id)
+            self.core.add_message(user_id, 'assistant', response_text)
             
-            # Send response
             for chunk in self._split_message(response_text):
-                await update.message.reply_text(chunk)
+                await update.message.reply_text(
+                    chunk, 
+                    parse_mode='Markdown',
+                    reply_to_message_id=update.message.message_id
+                )
         
         except Exception as e:
             await self._log_error(user_id, e)
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            error_msg = str(e)
+            if not error_msg.startswith(('⏱', '❌')):
+                error_msg = "❌ Something went wrong. Try again! 🔄"
+            await update.message.reply_text(error_msg)
     
-    # Callback Handler
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle callback queries"""
         query = update.callback_query
         await query.answer()
         
@@ -336,15 +341,13 @@ class GenaBot:
         user_id = query.from_user.id
         data = query.data
         
-        # Clear context
         if data == "clear_confirm":
             self.core.forget_context(user_id)
-            await query.message.edit_text("✅ Context forgotten! (History preserved)")
+            await query.message.edit_text("✅ Context forgotten! (History preserved) 📚", parse_mode='Markdown')
         
         elif data == "clear_cancel":
-            await query.message.edit_text("👍 Context kept")
+            await query.message.edit_text("👍 Context kept!")
         
-        # Settings navigation
         elif data == "settings_back":
             await self._show_settings_menu(query.message, user_id, edit=True)
         
@@ -357,7 +360,9 @@ class GenaBot:
         elif data == "settings_plan":
             await self._show_plan_menu(query.message, user_id)
         
-        # Model selection
+        elif data == "settings_custom":
+            await self._show_custom_instruction(query.message, user_id)
+        
         elif data.startswith("model_"):
             model = data.split("_", 1)[1]
             self.core.update_settings(user_id, model=model)
@@ -369,7 +374,6 @@ class GenaBot:
                 parse_mode='Markdown'
             )
         
-        # Persona selection
         elif data.startswith("persona_"):
             persona = data.split("_", 1)[1]
             plan = self.core.get_user_plan(user_id)
@@ -377,11 +381,7 @@ class GenaBot:
             
             if persona in available:
                 instruction = self.core.get_persona_instruction(persona)
-                self.core.update_settings(
-                    user_id, 
-                    current_persona=persona,
-                    systemInstruction=instruction
-                )
+                self.core.update_settings(user_id, current_persona=persona, systemInstruction=instruction)
                 
                 name = self.core.get_persona_name(persona)
                 keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="settings_back")]]
@@ -393,33 +393,27 @@ class GenaBot:
             else:
                 await query.answer("❌ Persona not available", show_alert=True)
         
-        # Plan upgrade
         elif data.startswith("upgrade_"):
             plan = data.split("_")[1].capitalize()
             await self._send_invoice(query.from_user.id, plan)
-            await query.message.edit_text(f"⭐️ Invoice sent for {plan} plan!")
+            await query.answer("⭐ Invoice sent!")
         
-        # Cancel subscription
         elif data == "cancel_subscription":
-            keyboard = [
-                [
-                    InlineKeyboardButton("✅ Yes, cancel", callback_data="cancel_confirm"),
-                    InlineKeyboardButton("❌ No, keep", callback_data="settings_plan")
-                ]
-            ]
+            keyboard = [[
+                InlineKeyboardButton("✅ Yes", callback_data="cancel_confirm"),
+                InlineKeyboardButton("❌ No", callback_data="settings_plan")
+            ]]
             await query.message.edit_text(
-                "⚠️ Cancel subscription?\n"
-                "You'll be downgraded to Free plan.",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                "⚠️ *Cancel subscription?*\n\nDowngrade to Free plan.",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
             )
         
         elif data == "cancel_confirm":
             self.core.cancel_subscription(user_id)
             await query.message.edit_text("✅ Subscription cancelled. Downgraded to Free.")
     
-    # Payment Handler
     async def handle_pre_checkout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle pre-checkout query"""
         query = update.pre_checkout_query
         
         try:
@@ -433,16 +427,13 @@ class GenaBot:
             
             await query.answer(ok=True)
             
-            # Upgrade user
             if query.from_user:
                 self.core.upgrade_plan(query.from_user.id, plan, duration_days=30)
         
         except Exception as e:
-            await query.answer(ok=False, error_message=str(e))
+            await query.answer(ok=False, error_message="Payment error")
     
-    # UI Builders
     async def _show_settings_menu(self, message: Message, user_id: int, edit: bool = False):
-        """Show settings menu"""
         settings = self.core.get_settings(user_id)
         plan = self.core.get_user_plan(user_id)
         persona = self.core.get_persona_name(settings.get('current_persona', 'friend'))
@@ -459,26 +450,18 @@ class GenaBot:
                 InlineKeyboardButton("🤖 Model", callback_data="settings_model"),
                 InlineKeyboardButton("👤 Persona", callback_data="settings_persona")
             ],
-            [
-                InlineKeyboardButton("📋 Your Plan", callback_data="settings_plan")
-            ]
+            [InlineKeyboardButton("📋 Your Plan", callback_data="settings_plan")]
         ]
         
+        if self.core.has_custom_instruction(user_id):
+            keyboard.insert(1, [InlineKeyboardButton("✏️ Custom Instructions", callback_data="settings_custom")])
+        
         if edit:
-            await message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            await message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         else:
-            await message.reply_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     
     async def _show_model_menu(self, message: Message, user_id: int):
-        """Show model selection menu"""
         plan = self.core.get_user_plan(user_id)
         available = self.core.get_available_models(plan)
         settings = self.core.get_settings(user_id)
@@ -488,12 +471,7 @@ class GenaBot:
         for model in available:
             desc = MODEL_DESCRIPTIONS.get(model, 'Standard')
             check = "✓ " if current == model else ""
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{check}{model} ({desc})",
-                    callback_data=f"model_{model}"
-                )
-            ])
+            keyboard.append([InlineKeyboardButton(f"{check}{desc}", callback_data=f"model_{model}")])
         
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="settings_back")])
         
@@ -504,7 +482,6 @@ class GenaBot:
         )
     
     async def _show_persona_menu(self, message: Message, user_id: int):
-        """Show persona selection menu"""
         plan = self.core.get_user_plan(user_id)
         available = self.core.get_available_personas(plan)
         settings = self.core.get_settings(user_id)
@@ -518,10 +495,7 @@ class GenaBot:
                     persona = available[i + j]
                     name = self.core.get_persona_name(persona)
                     check = "✓ " if persona == current else ""
-                    row.append(InlineKeyboardButton(
-                        f"{check}{name}",
-                        callback_data=f"persona_{persona}"
-                    ))
+                    row.append(InlineKeyboardButton(f"{check}{name}", callback_data=f"persona_{persona}"))
             keyboard.append(row)
         
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="settings_back")])
@@ -534,69 +508,58 @@ class GenaBot:
         )
     
     async def _show_plan_menu(self, message: Message, user_id: int):
-        """Show plan management menu"""
         plan = self.core.get_user_plan(user_id)
         expiration = self.core.get_plan_expiration(user_id)
         
-        text = f"*📋 Your Plan: {plan}*\n\n"
-        text += self.core.format_plan_details(plan)
+        text = f"*📋 Your Plan: {plan}*\n\n{self.core.format_plan_details(plan)}"
         
         if expiration:
             exp_date = datetime.fromisoformat(expiration).strftime('%Y-%m-%d')
-            text += f"\n\n📅 Expires: {exp_date}"
+            text += f"\n\n📅 Expires: *{exp_date}*"
         
         keyboard = []
         
-        # Show upgrade options
         if plan != 'VIP':
-            upgrade_plans = ['Basic', 'Premium', 'VIP']
-            for upgrade_plan in upgrade_plans:
-                if upgrade_plan != plan:
-                    price = PLAN_PRICES.get(upgrade_plan, 0)
-                    keyboard.append([
-                        InlineKeyboardButton(
-                            f"⬆️ Upgrade to {upgrade_plan} ({price} ⭐️/mo)",
-                            callback_data=f"upgrade_{upgrade_plan.lower()}"
-                        )
-                    ])
+            for upgrade_plan in ['Basic', 'Premium', 'VIP']:
+                if upgrade_plan == plan:
+                    continue
+                price = PLAN_PRICES.get(upgrade_plan, 0)
+                if price == 0:
+                    continue
+                keyboard.append([InlineKeyboardButton(
+                    f"⬆️ {upgrade_plan} ({price}⭐/mo)",
+                    callback_data=f"upgrade_{upgrade_plan.lower()}"
+                )])
         
-        # Show cancel option for paid plans
         if plan != 'Free':
-            keyboard.append([
-                InlineKeyboardButton(
-                    "❌ Cancel Subscription",
-                    callback_data="cancel_subscription"
-                )
-            ])
+            keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_subscription")])
         
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="settings_back")])
         
-        await message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        await message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     
-    # Utilities
-    async def _process_images(self, photos: List) -> List[Dict]:
-        """Process photo files to base64"""
-        result = []
-        for photo in photos:
-            file = await photo.get_file()
-            file_data = await file.download_as_bytearray()
-            mime_type = mimetypes.guess_type(file.file_path)[0]
-            
-            if mime_type and mime_type in ALLOWED_MIME_TYPES:
-                result.append({
-                    'inlineData': {
-                        'data': base64.b64encode(file_data).decode(),
-                        'mimeType': mime_type
-                    }
-                })
-        return result
+    async def _show_custom_instruction(self, message: Message, user_id: int):
+        settings = self.core.get_settings(user_id)
+        custom = settings.get('customInstruction', '').strip()
+        
+        text = (
+            "*✏️ Custom Instructions*\n\n"
+            "Add your own preferences to customize Gena's behavior!\n\n"
+        )
+        
+        if custom:
+            text += f"*Current:*\n`{custom}`\n\n"
+        else:
+            text += "_No custom instructions set_\n\n"
+        
+        text += "To update, send me your instructions starting with `/custom`\n"
+        text += "Example: `/custom Be more formal and technical`"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="settings_back")]]
+        
+        await message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     
     def _extract_response_text(self, response: Dict) -> str:
-        """Extract text from Gemini API response"""
         text = ""
         if 'candidates' in response and response['candidates']:
             candidate = response['candidates'][0]
@@ -604,10 +567,9 @@ class GenaBot:
                 for part in candidate['content']['parts']:
                     if 'text' in part:
                         text += part['text']
-        return text
+        return text.strip()
     
     def _split_message(self, text: str, max_len: int = 4096) -> List[str]:
-        """Split long messages"""
         if len(text) <= max_len:
             return [text]
         
@@ -629,7 +591,6 @@ class GenaBot:
         return chunks
     
     async def _send_invoice(self, user_id: int, plan: str):
-        """Send Telegram Stars invoice"""
         import json
         
         price = PLAN_PRICES.get(plan, 0)
@@ -639,7 +600,6 @@ class GenaBot:
         title = f"{plan} Plan"
         description = f"1 month subscription to Gena {plan} Plan"
         payload = json.dumps({'plan': plan, 'duration': 30})
-        currency = "XTR"  # Telegram Stars
         
         prices = [LabeledPrice(f"{plan} Monthly", price)]
         
@@ -648,13 +608,12 @@ class GenaBot:
             title=title,
             description=description,
             payload=payload,
-            provider_token="",  # Empty for Telegram Stars
-            currency=currency,
+            provider_token="",
+            currency="XTR",
             prices=prices
         )
     
     async def _log_error(self, user_id: int, error: Exception):
-        """Log error to file"""
         error_dir = Path.cwd() / 'data' / 'errors'
         error_dir.mkdir(parents=True, exist_ok=True)
         
@@ -681,16 +640,21 @@ class GenaBot:
         errors.append(error_data)
         
         with open(error_file, 'w') as f:
-            json.dump(errors[-100:], f, indent=2)  # Keep last 100 errors
+            json.dump(errors[-100:], f, indent=2)
     
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
-        """Global error handler"""
         print(f"Error: {context.error}")
     
     def run(self):
-        """Start the bot"""
+        """Start the bot with proper configuration"""
         print("🚀 Gena bot started!")
-        self.app.run_polling()
+        try:
+            self.app.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True
+            )
+        except Exception as e:
+            print(f"❌ Bot error: {e}")
 
 
 if __name__ == '__main__':

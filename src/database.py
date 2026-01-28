@@ -6,6 +6,7 @@ import sqlite3
 import json
 from datetime import datetime
 from typing import Optional, List, Dict
+from pathlib import Path
 
 
 class DatabaseManager:
@@ -13,6 +14,7 @@ class DatabaseManager:
     
     def __init__(self, db_path: str = 'data/database.db'):
         self.db_path = db_path
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.init_db()
     
     def init_db(self):
@@ -24,6 +26,8 @@ class DatabaseManager:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                full_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -41,7 +45,7 @@ class DatabaseManager:
             )
         ''')
         
-        # Settings table
+        # Settings table with custom instruction
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,13 +53,24 @@ class DatabaseManager:
                 model TEXT DEFAULT 'gemini-2.5-flash',
                 current_persona TEXT DEFAULT 'friend',
                 system_instruction TEXT,
+                custom_instruction TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         ''')
         
-        # Usage table (rate limiting)
+        # Add custom_instruction column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("PRAGMA table_info(settings)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'custom_instruction' not in columns:
+                cursor.execute("ALTER TABLE settings ADD COLUMN custom_instruction TEXT DEFAULT ''")
+                print("✅ Added custom_instruction column to existing database")
+        except Exception as e:
+            pass  # Column already exists or table doesn't exist yet
+        
+        # Usage table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS usage (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,19 +84,35 @@ class DatabaseManager:
             )
         ''')
         
-        # Message history table
+        # Separate messages table for each user
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS message_history (
+            CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
-                user_message TEXT NOT NULL,
-                bot_response TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                media_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id),
+                FOREIGN KEY (media_id) REFERENCES media(id)
+            )
+        ''')
+        
+        # Media reference table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS media (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                file_id TEXT NOT NULL,
+                file_path TEXT,
+                mime_type TEXT,
+                file_size INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         ''')
         
-        # Safety settings table (global settings)
+        # Safety settings table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS safety_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -91,66 +122,60 @@ class DatabaseManager:
         ''')
         
         # Create indexes
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_history_user_id 
-            ON message_history(user_id)
-        ''')
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_history_created 
-            ON message_history(created_at)
-        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, created_at DESC)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_media_user ON media(user_id, created_at DESC)')
         
         conn.commit()
         conn.close()
     
-    def init_user(self, user_id: int):
-        """Initialize a new user with default values"""
+    def init_user(self, user_id: int, username: str = None, full_name: str = None):
+        """Initialize a new user"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute(
-            'INSERT OR IGNORE INTO users (user_id) VALUES (?)', 
-            (user_id,)
-        )
-        
         cursor.execute('''
-            INSERT OR IGNORE INTO plans (user_id, plan, expiration)
-            VALUES (?, 'Free', NULL)
-        ''', (user_id,))
+            INSERT INTO users (user_id, username, full_name) 
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET 
+                username = excluded.username,
+                full_name = excluded.full_name,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (user_id, username, full_name))
         
-        cursor.execute('''
-            INSERT OR IGNORE INTO settings (user_id, model, current_persona, system_instruction)
-            VALUES (?, 'gemini-2.5-flash', 'friend', '')
-        ''', (user_id,))
-        
-        cursor.execute('''
-            INSERT OR IGNORE INTO usage (user_id, rate_limit_minute, rate_limit_count)
-            VALUES (?, '', 0)
-        ''', (user_id,))
+        cursor.execute('INSERT OR IGNORE INTO plans (user_id) VALUES (?)', (user_id,))
+        cursor.execute('INSERT OR IGNORE INTO settings (user_id) VALUES (?)', (user_id,))
+        cursor.execute('INSERT OR IGNORE INTO usage (user_id) VALUES (?)', (user_id,))
         
         conn.commit()
         conn.close()
+    
+    def get_user_info(self, user_id: int) -> Dict:
+        """Get user information"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT username, full_name FROM users WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {'username': result[0], 'full_name': result[1]}
+        return {'username': None, 'full_name': 'friend'}
     
     def get_user_plan(self, user_id: int) -> str:
         """Get user's current plan"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute(
-            'SELECT plan, expiration FROM plans WHERE user_id = ?',
-            (user_id,)
-        )
-        
+        cursor.execute('SELECT plan, expiration FROM plans WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
         conn.close()
         
         if not result:
-            self.init_user(user_id)
             return 'Free'
         
         plan, expiration = result
         
-        # Check expiration
         if expiration:
             exp_time = datetime.fromisoformat(expiration)
             if exp_time < datetime.now():
@@ -164,21 +189,30 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('''
-            UPDATE plans SET plan = ?, expiration = ?
-            WHERE user_id = ?
-        ''', (plan, expiration, user_id))
+        cursor.execute('UPDATE plans SET plan = ?, expiration = ? WHERE user_id = ?', 
+                      (plan, expiration, user_id))
         
         conn.commit()
         conn.close()
     
+    def get_plan_expiration(self, user_id: int) -> Optional[str]:
+        """Get plan expiration"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT expiration FROM plans WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result[0] if result else None
+    
     def get_settings(self, user_id: int) -> Dict:
-        """Get user's settings"""
+        """Get user settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT model, current_persona, system_instruction 
+            SELECT model, current_persona, system_instruction, custom_instruction 
             FROM settings WHERE user_id = ?
         ''', (user_id,))
         
@@ -186,29 +220,30 @@ class DatabaseManager:
         conn.close()
         
         if not result:
-            self.init_user(user_id)
             return {
                 'model': 'gemini-2.5-flash',
                 'current_persona': 'friend',
-                'systemInstruction': ''
+                'systemInstruction': '',
+                'customInstruction': ''
             }
         
-        model, persona, instruction = result
         return {
-            'model': model,
-            'current_persona': persona,
-            'systemInstruction': instruction
+            'model': result[0],
+            'current_persona': result[1],
+            'systemInstruction': result[2] or '',
+            'customInstruction': result[3] or ''
         }
     
     def update_settings(self, user_id: int, **kwargs):
-        """Update user's settings"""
+        """Update user settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         update_map = {
             'model': 'model',
             'current_persona': 'current_persona',
-            'systemInstruction': 'system_instruction'
+            'systemInstruction': 'system_instruction',
+            'customInstruction': 'custom_instruction'
         }
         
         updates = []
@@ -221,39 +256,52 @@ class DatabaseManager:
         
         if updates:
             values.append(user_id)
-            query = f'''
-                UPDATE settings 
-                SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP 
-                WHERE user_id = ?
-            '''
+            query = f'UPDATE settings SET {", ".join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?'
             cursor.execute(query, values)
             conn.commit()
         
         conn.close()
     
-    def add_to_history(self, user_id: int, user_message: str, bot_response: str):
-        """Add a message pair to history"""
+    def add_message(self, user_id: int, role: str, content: str, media_id: int = None):
+        """Add a message to history"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT INTO message_history (user_id, user_message, bot_response)
-            VALUES (?, ?, ?)
-        ''', (user_id, user_message, bot_response))
+            INSERT INTO messages (user_id, role, content, media_id)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, role, content, media_id))
         
         conn.commit()
         conn.close()
     
-    def get_history(self, user_id: int, limit: int = 100) -> List[Dict]:
-        """Get user's message history"""
+    def add_media(self, user_id: int, file_id: str, file_path: str, mime_type: str, file_size: int) -> int:
+        """Add media reference and return media_id"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT user_message, bot_response, created_at 
-            FROM message_history
-            WHERE user_id = ?
-            ORDER BY created_at DESC
+            INSERT INTO media (user_id, file_id, file_path, mime_type, file_size)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, file_id, file_path, mime_type, file_size))
+        
+        media_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return media_id
+    
+    def get_history(self, user_id: int, limit: int = 100) -> List[Dict]:
+        """Get conversation history"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT m.id, m.role, m.content, m.created_at, m.media_id, med.file_path, med.mime_type
+            FROM messages m
+            LEFT JOIN media med ON m.media_id = med.id
+            WHERE m.user_id = ?
+            ORDER BY m.created_at DESC
             LIMIT ?
         ''', (user_id, limit))
         
@@ -261,36 +309,42 @@ class DatabaseManager:
         conn.close()
         
         history = []
-        for user_msg, bot_msg, timestamp in reversed(results):
-            history.append({
-                'timestamp': timestamp,
-                'user': user_msg,
-                'bot': bot_msg
-            })
+        for msg_id, role, content, timestamp, media_id, file_path, mime_type in reversed(results):
+            entry = {
+                'id': msg_id,
+                'role': role,
+                'content': content,
+                'timestamp': timestamp
+            }
+            if media_id and file_path:
+                entry['type'] = 'media'
+                entry['media_ref'] = media_id
+                entry['file_path'] = file_path
+                entry['mime_type'] = mime_type
+            else:
+                entry['type'] = 'text'
+            
+            history.append(entry)
         
         return history
     
     def clear_history(self, user_id: int):
-        """Clear user's message history"""
+        """Clear user messages"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute(
-            'DELETE FROM message_history WHERE user_id = ?',
-            (user_id,)
-        )
+        cursor.execute('DELETE FROM messages WHERE user_id = ?', (user_id,))
         
         conn.commit()
         conn.close()
     
     def get_usage(self, user_id: int) -> Dict:
-        """Get user's usage stats"""
+        """Get usage stats"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT rate_limit_minute, rate_limit_count, 
-                   image_limit_count, image_limit_reset
+            SELECT rate_limit_minute, rate_limit_count, image_limit_count, image_limit_reset
             FROM usage WHERE user_id = ?
         ''', (user_id,))
         
@@ -298,27 +352,19 @@ class DatabaseManager:
         conn.close()
         
         if not result:
-            self.init_user(user_id)
             return {
                 'rateLimit': {'minute': '', 'count': 0},
                 'imageLimit': {'count': 0, 'resetTime': ''}
             }
         
-        rate_minute, rate_count, image_count, image_reset = result
         return {
-            'rateLimit': {'minute': rate_minute, 'count': rate_count},
-            'imageLimit': {'count': image_count, 'resetTime': image_reset or ''}
+            'rateLimit': {'minute': result[0], 'count': result[1]},
+            'imageLimit': {'count': result[2], 'resetTime': result[3] or ''}
         }
     
-    def update_usage(
-        self, 
-        user_id: int, 
-        rate_minute: str = None, 
-        rate_count: int = None, 
-        image_count: int = None, 
-        image_reset: str = None
-    ):
-        """Update user's usage stats"""
+    def update_usage(self, user_id: int, rate_minute: str = None, rate_count: int = None, 
+                    image_count: int = None, image_reset: str = None):
+        """Update usage stats"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -348,7 +394,7 @@ class DatabaseManager:
         conn.close()
     
     def get_safety_settings(self) -> List[Dict]:
-        """Get global safety settings"""
+        """Get safety settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -365,7 +411,7 @@ class DatabaseManager:
             return []
     
     def set_safety_settings(self, settings: List[Dict]):
-        """Update global safety settings"""
+        """Set safety settings"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -373,10 +419,26 @@ class DatabaseManager:
         
         cursor.execute('''
             INSERT INTO safety_settings (id, settings) VALUES (1, ?)
-            ON CONFLICT(id) DO UPDATE SET 
-                settings = excluded.settings, 
-                updated_at = CURRENT_TIMESTAMP
+            ON CONFLICT(id) DO UPDATE SET settings = excluded.settings, updated_at = CURRENT_TIMESTAMP
         ''', (settings_json,))
         
         conn.commit()
         conn.close()
+    
+    def get_total_users(self) -> int:
+        """Get total user count"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users')
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+    
+    def get_total_messages(self) -> int:
+        """Get total message count"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM messages')
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count

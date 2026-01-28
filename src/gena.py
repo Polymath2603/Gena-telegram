@@ -1,30 +1,26 @@
 """
 Gena - AI Telegram Bot Core Logic
-Handles user management, database operations, and business logic
 """
-import json
-from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from database import DatabaseManager
-from nlu import NLUEngine, Intent
+from nlu import NLUEngine
+from personas import get_available_personas, get_persona_instruction, get_persona_name
 
 # Plan configuration
 PLAN_LIMITS = {
-    'Free': {'rate': 5, 'turns': 3, 'images': 3, 'context_turns': 0},
-    'Basic': {'rate': 10, 'turns': 5, 'images': 5, 'context_turns': 3},
-    'Premium': {'rate': 20, 'turns': 8, 'images': 10, 'context_turns': 5},
-    'VIP': {'rate': 30, 'turns': 10, 'images': 50, 'context_turns': 8}
+    'Free': {'rate': 5, 'turns': 3, 'images': 3, 'context_turns': 0, 'custom_instruction': False},
+    'Basic': {'rate': 10, 'turns': 5, 'images': 5, 'context_turns': 3, 'custom_instruction': False},
+    'Premium': {'rate': 20, 'turns': 8, 'images': 10, 'context_turns': 5, 'custom_instruction': True},
+    'VIP': {'rate': 30, 'turns': 10, 'images': 50, 'context_turns': 8, 'custom_instruction': True}
 }
 
-# Plan pricing in Telegram Stars
 PLAN_PRICES = {
-    'Basic': 50,    # 50 stars/month
-    'Premium': 100,  # 100 stars/month
-    'VIP': 200      # 200 stars/month
+    'Basic': 50,
+    'Premium': 100,
+    'VIP': 200
 }
 
-# Model access by plan
 ALL_MODELS = {
     'Free': ['gemini-2.5-flash'],
     'Basic': ['gemini-2.5-flash', 'gemini-2.0-flash'],
@@ -33,66 +29,12 @@ ALL_MODELS = {
 }
 
 MODEL_DESCRIPTIONS = {
-    'gemini-2.5-flash': 'Fast',
-    'gemini-2.0-flash': 'Enhanced',
-    'gemini-1.5-pro': 'Professional',
-    'gemini-1.5-pro-exp': 'Premium'
+    'gemini-2.5-flash': 'Fast ⚡',
+    'gemini-2.0-flash': 'Enhanced 🚀',
+    'gemini-1.5-pro': 'Pro 💎',
+    'gemini-1.5-pro-exp': 'Premium 👑'
 }
 
-# Persona access by plan
-PERSONA_ACCESS = {
-    'Free': ['friend'],
-    'Basic': ['friend', 'advisor', 'artist'],
-    'Premium': ['friend', 'advisor', 'artist', 'scholar', 'coach'],
-    'VIP': ['friend', 'advisor', 'artist', 'scholar', 'coach', 'mystic']
-}
-
-PERSONAS = {
-    'friend': {
-        'name': 'Friend',
-        'instruction': """You are Gena in Friend mode - your best friend.
-Be casual, funny, genuinely supportive. Share jokes, relate to experiences, offer solidarity.
-Use their name occasionally, ask about their day, be the friend they want to talk to.
-Keep it real and authentic - no pretense, just genuine friendship."""
-    },
-    'advisor': {
-        'name': 'Advisor',
-        'instruction': """You are Gena in Advisor mode - a strategic, logical guide.
-Provide sound advice based on facts and practical thinking. Be direct but respectful.
-Break down problems into actionable steps. Help them see pros/cons clearly.
-Be professional yet personable. Offer wisdom from experience."""
-    },
-    'artist': {
-        'name': 'Artist',
-        'instruction': """You are Gena in Artist mode - your creative collaborator.
-Think outside the box, suggest unconventional ideas, spark imagination boldly.
-Celebrate artistic expression in all forms. Ask "what if" without limits.
-Be enthusiastic about breaking rules and creating something beautiful."""
-    },
-    'scholar': {
-        'name': 'Scholar',
-        'instruction': """You are Gena in Scholar mode - intellectual guide with deep knowledge.
-Provide well-researched, thorough explanations. Love diving into details and nuances.
-Cite facts, explore ideas from multiple angles, engage in intellectual discourse.
-Be curious and help them understand complex subjects with clarity."""
-    },
-    'coach': {
-        'name': 'Coach',
-        'instruction': """You are Gena in Coach mode - your personal trainer and cheerleader.
-Be energetic and relentless about helping them achieve goals. Celebrate every win.
-Push them gently but firmly toward their potential. Break down challenges into doable steps.
-Use motivation, strategy, and accountability. Believe in them when they doubt themselves."""
-    },
-    'mystic': {
-        'name': 'Mystic',
-        'instruction': """You are Gena in Mystic mode - spiritual and philosophical guide.
-Explore deeper meanings, life questions, and inner wisdom. Be contemplative and thoughtful.
-Use metaphors, ask profound questions, help them find their own truth.
-Be calm, wise, and slightly mysterious. Encourage reflection and self-discovery."""
-    }
-}
-
-# Safety settings
 DEFAULT_SAFETY_SETTINGS = [
     {'category': 'HARM_CATEGORY_HARASSMENT', 'threshold': 'BLOCK_MEDIUM_AND_ABOVE'},
     {'category': 'HARM_CATEGORY_HATE_SPEECH', 'threshold': 'BLOCK_MEDIUM_AND_ABOVE'},
@@ -102,28 +44,26 @@ DEFAULT_SAFETY_SETTINGS = [
 
 
 class GenaCore:
-    """Core business logic for Gena bot"""
+    """Core business logic"""
     
     def __init__(self, db_path: str = 'data/database.db'):
         self.db = DatabaseManager(db_path)
         self._initialize_safety_settings()
     
     def _initialize_safety_settings(self):
-        """Initialize default safety settings if not present"""
         if not self.db.get_safety_settings():
             self.db.set_safety_settings(DEFAULT_SAFETY_SETTINGS)
     
-    # User Management
-    def initialize_user(self, user_id: int) -> None:
-        """Initialize a new user with default settings"""
-        self.db.init_user(user_id)
+    def initialize_user(self, user_id: int, username: str = None, full_name: str = None) -> None:
+        self.db.init_user(user_id, username, full_name)
+    
+    def get_user_info(self, user_id: int) -> Dict:
+        return self.db.get_user_info(user_id)
     
     def get_user_plan(self, user_id: int) -> str:
-        """Get user's current plan"""
         return self.db.get_user_plan(user_id)
     
     def upgrade_plan(self, user_id: int, plan: str, duration_days: int = 30) -> bool:
-        """Upgrade user to a new plan"""
         if plan not in PLAN_LIMITS:
             return False
         
@@ -135,47 +75,54 @@ class GenaCore:
         return True
     
     def cancel_subscription(self, user_id: int) -> None:
-        """Cancel user's subscription (downgrade to Free)"""
         self.db.set_user_plan(user_id, 'Free', None)
     
     def get_plan_expiration(self, user_id: int) -> Optional[str]:
-        """Get plan expiration date"""
-        import sqlite3
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('SELECT expiration FROM plans WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
+        return self.db.get_plan_expiration(user_id)
     
-    # Settings Management
     def get_settings(self, user_id: int) -> Dict:
-        """Get user settings"""
         return self.db.get_settings(user_id)
     
     def update_settings(self, user_id: int, **kwargs) -> None:
-        """Update user settings"""
         self.db.update_settings(user_id, **kwargs)
     
     def get_available_models(self, plan: str) -> List[str]:
-        """Get models available for a plan"""
         return ALL_MODELS.get(plan, ALL_MODELS['Free'])
     
     def get_available_personas(self, plan: str) -> List[str]:
-        """Get personas available for a plan"""
-        return PERSONA_ACCESS.get(plan, ['friend'])
+        return get_available_personas(plan)
     
     def get_persona_instruction(self, persona_key: str) -> str:
-        """Get system instruction for a persona"""
-        return PERSONAS.get(persona_key, PERSONAS['friend'])['instruction']
+        return get_persona_instruction(persona_key)
     
     def get_persona_name(self, persona_key: str) -> str:
-        """Get display name for a persona"""
-        return PERSONAS.get(persona_key, {'name': 'Friend'})['name']
+        return get_persona_name(persona_key)
     
-    # Rate Limiting
+    def has_custom_instruction(self, user_id: int) -> bool:
+        plan = self.get_user_plan(user_id)
+        return PLAN_LIMITS[plan]['custom_instruction']
+    
+    def build_system_instruction(self, user_id: int, persona_key: str) -> str:
+        """Build complete system instruction with persona + custom instruction"""
+        user_info = self.get_user_info(user_id)
+        full_name = user_info.get('full_name') or 'friend'
+        
+        # Base persona instruction
+        instruction = get_persona_instruction(persona_key)
+        
+        # Add name context
+        instruction += f"\n\nThe user's name is {full_name}. Use this name naturally in conversation."
+        
+        # Add custom instruction if available
+        if self.has_custom_instruction(user_id):
+            settings = self.get_settings(user_id)
+            custom = settings.get('customInstruction', '').strip()
+            if custom:
+                instruction += f"\n\nAdditional user preferences:\n{custom}"
+        
+        return instruction
+    
     def check_rate_limit(self, user_id: int) -> bool:
-        """Check if user is within rate limits"""
         plan = self.get_user_plan(user_id)
         usage = self.db.get_usage(user_id)
         
@@ -183,7 +130,6 @@ class GenaCore:
         rate_data = usage['rateLimit']
         
         if rate_data['minute'] != current_minute:
-            # Reset for new minute
             self.db.update_usage(user_id, rate_minute=current_minute, rate_count=1)
             return True
         else:
@@ -192,7 +138,6 @@ class GenaCore:
             return count <= PLAN_LIMITS[plan]['rate']
     
     def check_image_limit(self, user_id: int) -> bool:
-        """Check if user is within daily image limits"""
         plan = self.get_user_plan(user_id)
         usage = self.db.get_usage(user_id)
         
@@ -200,7 +145,6 @@ class GenaCore:
         image_data = usage['imageLimit']
         
         if image_data['resetTime'] != current_day:
-            # Reset for new day
             self.db.update_usage(user_id, image_count=1, image_reset=current_day)
             return True
         else:
@@ -208,13 +152,13 @@ class GenaCore:
             self.db.update_usage(user_id, image_count=count)
             return count <= PLAN_LIMITS[plan]['images']
     
-    # History Management
-    def add_to_history(self, user_id: int, user_message: str, bot_response: str) -> None:
-        """Add message to history"""
-        self.db.add_to_history(user_id, user_message, bot_response)
+    def add_message(self, user_id: int, role: str, content: str, media_id: int = None) -> None:
+        self.db.add_message(user_id, role, content, media_id)
+    
+    def add_media(self, user_id: int, file_id: str, file_path: str, mime_type: str, file_size: int) -> int:
+        return self.db.add_media(user_id, file_id, file_path, mime_type, file_size)
     
     def get_context_history(self, user_id: int) -> List[Dict]:
-        """Get conversation history for context (limited by plan)"""
         plan = self.get_user_plan(user_id)
         context_turns = PLAN_LIMITS[plan]['context_turns']
         
@@ -224,28 +168,18 @@ class GenaCore:
         return self.db.get_history(user_id, limit=context_turns)
     
     def get_full_history(self, user_id: int, limit: int = 100) -> List[Dict]:
-        """Get full conversation history (for display)"""
         return self.db.get_history(user_id, limit=limit)
     
     def forget_context(self, user_id: int) -> None:
-        """Clear context without deleting history - set context turns to 0 temporarily"""
-        # We don't actually delete anything, just return empty context next time
-        # History is preserved for display purposes
-        pass
+        pass  # Context is automatically limited by plan
     
-    # NLU Integration
     def detect_intent(self, text: str) -> tuple:
-        """Detect user intent from natural language"""
         return NLUEngine.detect_intent(text)
     
-    # Safety Settings
     def get_safety_settings(self) -> List[Dict]:
-        """Get safety settings"""
         return self.db.get_safety_settings()
     
-    # Utility
     def get_plan_info(self, plan: str) -> Dict:
-        """Get plan information"""
         limits = PLAN_LIMITS.get(plan, PLAN_LIMITS['Free'])
         price = PLAN_PRICES.get(plan, 0)
         
@@ -258,20 +192,21 @@ class GenaCore:
         }
     
     def format_plan_details(self, plan: str) -> str:
-        """Format plan details for display"""
         info = self.get_plan_info(plan)
         limits = info['limits']
         
-        details = f"*{plan} Plan*\n\n"
-        details += f"💬 Messages: {limits['rate']}/minute\n"
-        details += f"🖼 Images: {limits['images']}/day\n"
-        details += f"💭 Context: {limits['context_turns']} turns\n"
-        details += f"🤖 Models: {len(info['models'])}\n"
-        details += f"👤 Personas: {len(info['personas'])}\n"
+        details = f"💬 Messages: *{limits['rate']}/minute*\n"
+        details += f"🖼 Images: *{limits['images']}/day*\n"
+        details += f"💭 Context: *{limits['context_turns']} turns*\n"
+        details += f"🤖 Models: *{len(info['models'])}*\n"
+        details += f"👤 Personas: *{len(info['personas'])}*\n"
+        
+        if limits['custom_instruction']:
+            details += f"✏️ Custom Instructions: *Yes*\n"
         
         if info['price'] > 0:
-            details += f"\n⭐️ Price: {info['price']} stars/month"
+            details += f"\n⭐ *{info['price']} stars/month*"
         else:
-            details += f"\n✨ Free Forever"
+            details += f"\n✨ *Free Forever*"
         
         return details
