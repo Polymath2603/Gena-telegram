@@ -1,0 +1,5 @@
+- gena.py not importing the personas it has a copy of it embedded, make it use the personas.py and do the same if it's supported to use any other file
+- in make it seperate messages by user id, and save user info like username and name.
+- for database edit make one migrate.py to run once.
+- i think the initialization isn't very good
+- the answers are too long, how can u make it shooter?

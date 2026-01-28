@@ -14,7 +14,8 @@ from telegram import (
     Update, 
     InlineKeyboardMarkup, 
     InlineKeyboardButton,
-    Message
+    Message,
+    LabeledPrice
 )
 from telegram.ext import (
     Application,
@@ -25,7 +26,8 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from gena import GenaCore, PLAN_PRICES
+from gena import GenaCore, PLAN_PRICES, MODEL_DESCRIPTIONS
+from admin_dashboard import AdminDashboard
 
 # Load environment
 load_dotenv()
@@ -204,7 +206,6 @@ class GenaBot:
             await update.message.reply_text("❌ Not authorized")
             return
         
-        from admin_dashboard import AdminDashboard
         dashboard = AdminDashboard(self.core.db)
         report = dashboard.generate_report()
         
@@ -485,7 +486,6 @@ class GenaBot:
         
         keyboard = []
         for model in available:
-            from gena import MODEL_DESCRIPTIONS
             desc = MODEL_DESCRIPTIONS.get(model, 'Standard')
             check = "✓ " if current == model else ""
             keyboard.append([
@@ -641,7 +641,6 @@ class GenaBot:
         payload = json.dumps({'plan': plan, 'duration': 30})
         currency = "XTR"  # Telegram Stars
         
-        from telegram import LabeledPrice
         prices = [LabeledPrice(f"{plan} Monthly", price)]
         
         await self.app.bot.send_invoice(
