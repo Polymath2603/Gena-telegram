@@ -9,10 +9,10 @@ from personas import get_available_personas, get_persona_instruction, get_person
 
 # Plan configuration
 PLAN_LIMITS = {
-    'Free': {'rate': 5, 'turns': 3, 'images': 3, 'context_turns': 0, 'custom_instruction': False},
-    'Basic': {'rate': 10, 'turns': 5, 'images': 5, 'context_turns': 3, 'custom_instruction': False},
-    'Premium': {'rate': 20, 'turns': 8, 'images': 10, 'context_turns': 5, 'custom_instruction': True},
-    'VIP': {'rate': 30, 'turns': 10, 'images': 50, 'context_turns': 8, 'custom_instruction': True}
+    'Free': {'rate': 5, 'turns': 3, 'images': 3, 'context_turns': 3, 'custom_instruction': False},
+    'Basic': {'rate': 10, 'turns': 5, 'images': 5, 'context_turns': 5, 'custom_instruction': False},
+    'Premium': {'rate': 20, 'turns': 8, 'images': 10, 'context_turns': 8, 'custom_instruction': True},
+    'VIP': {'rate': 30, 'turns': 10, 'images': 20, 'context_turns': 10, 'custom_instruction': True}
 }
 
 PLAN_PRICES = {
