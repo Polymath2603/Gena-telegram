@@ -22,12 +22,13 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Users table
+        # Users table with first_name and last_name
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT,
-                full_name TEXT,
+                first_name TEXT,
+                last_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -60,15 +61,18 @@ class DatabaseManager:
             )
         ''')
         
-        # Add custom_instruction column if it doesn't exist (for existing databases)
+        # Add first_name and last_name columns if they don't exist (for existing databases)
         try:
-            cursor.execute("PRAGMA table_info(settings)")
+            cursor.execute("PRAGMA table_info(users)")
             columns = [row[1] for row in cursor.fetchall()]
-            if 'custom_instruction' not in columns:
-                cursor.execute("ALTER TABLE settings ADD COLUMN custom_instruction TEXT DEFAULT ''")
-                print("✅ Added custom_instruction column to existing database")
+            if 'first_name' not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN first_name TEXT")
+                print("✅ Added first_name column to existing database")
+            if 'last_name' not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN last_name TEXT")
+                print("✅ Added last_name column to existing database")
         except Exception as e:
-            pass  # Column already exists or table doesn't exist yet
+            pass
         
         # Usage table
         cursor.execute('''
@@ -128,19 +132,20 @@ class DatabaseManager:
         conn.commit()
         conn.close()
     
-    def init_user(self, user_id: int, username: str = None, full_name: str = None):
+    def init_user(self, user_id: int, username: str = None, first_name: str = None, last_name: str = None):
         """Initialize a new user"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT INTO users (user_id, username, full_name) 
-            VALUES (?, ?, ?)
+            INSERT INTO users (user_id, username, first_name, last_name) 
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET 
                 username = excluded.username,
-                full_name = excluded.full_name,
+                first_name = excluded.first_name,
+                last_name = excluded.last_name,
                 updated_at = CURRENT_TIMESTAMP
-        ''', (user_id, username, full_name))
+        ''', (user_id, username, first_name, last_name))
         
         cursor.execute('INSERT OR IGNORE INTO plans (user_id) VALUES (?)', (user_id,))
         cursor.execute('INSERT OR IGNORE INTO settings (user_id) VALUES (?)', (user_id,))
@@ -154,13 +159,18 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('SELECT username, full_name FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT username, first_name, last_name FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
         conn.close()
         
         if result:
-            return {'username': result[0], 'full_name': result[1]}
-        return {'username': None, 'full_name': 'friend'}
+            return {
+                'username': result[0], 
+                'first_name': result[1],
+                'last_name': result[2],
+                'full_name': f"{result[1]} {result[2]}".strip() if result[1] or result[2] else None
+            }
+        return {'username': None, 'first_name': 'friend', 'last_name': None, 'full_name': 'friend'}
     
     def get_user_plan(self, user_id: int) -> str:
         """Get user's current plan"""

@@ -36,7 +36,7 @@ def fix_database():
         
         conn.commit()
         
-        # 2. Check and add username/full_name to users
+        # 2. Check and add username/first_name/last_name to users
         print("\n2️⃣  Checking users table...")
         cursor.execute("PRAGMA table_info(users)")
         user_columns = [row[1] for row in cursor.fetchall()]
@@ -47,11 +47,31 @@ def fix_database():
         else:
             print("   ✅ username column exists")
         
-        if 'full_name' not in user_columns:
-            cursor.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
-            print("   ✅ Added full_name column")
+        if 'first_name' not in user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN first_name TEXT")
+            print("   ✅ Added first_name column")
         else:
-            print("   ✅ full_name column exists")
+            print("   ✅ first_name column exists")
+        
+        if 'last_name' not in user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN last_name TEXT")
+            print("   ✅ Added last_name column")
+        else:
+            print("   ✅ last_name column exists")
+        
+        # Remove old full_name if it exists and migrate data
+        if 'full_name' in user_columns:
+            print("   🔄 Migrating full_name to first_name/last_name...")
+            cursor.execute('SELECT user_id, full_name FROM users WHERE full_name IS NOT NULL')
+            for user_id, full_name in cursor.fetchall():
+                parts = full_name.split(' ', 1)
+                first_name = parts[0]
+                last_name = parts[1] if len(parts) > 1 else ''
+                cursor.execute(
+                    'UPDATE users SET first_name = ?, last_name = ? WHERE user_id = ?',
+                    (first_name, last_name, user_id)
+                )
+            print("   ✅ Migrated full_name data")
         
         conn.commit()
         
@@ -76,28 +96,38 @@ def fix_database():
                 )
             ''')
             
-            # Migrate old data
-            cursor.execute('SELECT user_id, user_message, bot_response, created_at FROM message_history')
+            # Migrate old data - THIS IS THE FIX!
+            cursor.execute('SELECT user_id, user_message, bot_response, created_at FROM message_history ORDER BY id')
             old_messages = cursor.fetchall()
             
+            migrated_count = 0
             for user_id, user_msg, bot_msg, timestamp in old_messages:
+                # Insert user message
                 cursor.execute(
                     'INSERT INTO messages (user_id, role, content, created_at) VALUES (?, ?, ?, ?)',
                     (user_id, 'user', user_msg, timestamp)
                 )
+                # Insert bot response
                 cursor.execute(
                     'INSERT INTO messages (user_id, role, content, created_at) VALUES (?, ?, ?, ?)',
                     (user_id, 'assistant', bot_msg, timestamp)
                 )
+                migrated_count += 1
+            
+            conn.commit()
             
             # Rename old table as backup
             cursor.execute('ALTER TABLE message_history RENAME TO message_history_backup')
+            conn.commit()
             
-            print(f"   ✅ Migrated {len(old_messages)} message pairs to new format")
+            print(f"   ✅ Migrated {migrated_count} message pairs ({migrated_count * 2} total messages)")
             print("   ℹ️  Old table renamed to message_history_backup")
         
         elif 'messages' in tables:
-            print("   ✅ Messages table exists (new format)")
+            # Count messages
+            cursor.execute('SELECT COUNT(*) FROM messages')
+            msg_count = cursor.fetchone()[0]
+            print(f"   ✅ Messages table exists with {msg_count} messages")
         else:
             print("   ℹ️  No message tables yet - will be created on first use")
         
@@ -120,7 +150,9 @@ def fix_database():
             ''')
             print("   ✅ Created media table")
         else:
-            print("   ✅ Media table exists")
+            cursor.execute('SELECT COUNT(*) FROM media')
+            media_count = cursor.fetchone()[0]
+            print(f"   ✅ Media table exists with {media_count} files")
         
         conn.commit()
         
@@ -158,7 +190,8 @@ def fix_database():
                 # Check if user already exists
                 cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
                 if cursor.fetchone():
-                    continue  # Skip if already migrated
+                    print(f"   ⏭️  User {user_id} already migrated, skipping...")
+                    continue
                 
                 # Insert user
                 cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
@@ -185,7 +218,7 @@ def fix_database():
                         ''', (
                             user_id,
                             settings.get('model', 'gemini-2.5-flash'),
-                            settings.get('current_persona', 'friend'),
+                            settings.get('current_persona', 'buddy'),
                             settings.get('systemInstruction', ''),
                             settings.get('customInstruction', '')
                         ))
@@ -211,26 +244,30 @@ def fix_database():
                             image_limit.get('resetTime', '')
                         ))
                 
-                # Migrate history
+                # Migrate history - FIXED: Properly insert messages
                 history_file = user_dir / 'history.json'
                 if history_file.exists():
                     with open(history_file, 'r') as f:
                         history = json.load(f)
+                        msg_count = 0
                         for entry in history:
                             if isinstance(entry, dict) and 'user' in entry and 'bot' in entry:
                                 timestamp = entry.get('timestamp', datetime.now().isoformat())
+                                # User message
                                 cursor.execute('''
                                     INSERT INTO messages (user_id, role, content, created_at)
                                     VALUES (?, ?, ?, ?)
                                 ''', (user_id, 'user', entry['user'], timestamp))
+                                # Bot response
                                 cursor.execute('''
                                     INSERT INTO messages (user_id, role, content, created_at)
                                     VALUES (?, ?, ?, ?)
                                 ''', (user_id, 'assistant', entry['bot'], timestamp))
+                                msg_count += 1
+                        print(f"      ✅ Migrated {msg_count} message pairs for user {user_id}")
                 
                 migrated += 1
-            
-            conn.commit()
+                conn.commit()
             
             if migrated > 0:
                 print(f"   ✅ Migrated {migrated} users from JSON files")
@@ -270,18 +307,27 @@ def fix_database():
         user_count = cursor.fetchone()[0]
         cursor.execute('SELECT COUNT(*) FROM messages')
         msg_count = cursor.fetchone()[0]
+        cursor.execute('SELECT COUNT(*) FROM media')
+        media_count = cursor.fetchone()[0]
         
         print(f"\n📊 Database Statistics:")
         print(f"   👥 Users: {user_count}")
         print(f"   💬 Messages: {msg_count}")
+        print(f"   🖼️  Media Files: {media_count}")
+        
+        # Check if message_history_backup exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='message_history_backup'")
+        if cursor.fetchone():
+            print(f"\n💡 Backup Table Info:")
+            print(f"   📦 message_history_backup exists (safe to delete after verification)")
         
         if users_dir.exists():
             print(f"\n💡 Next Steps:")
             print(f"   1. Test the bot to make sure everything works")
-            print(f"   2. Once confirmed, you can delete:")
+            print(f"   2. Check that your messages are visible")
+            print(f"   3. Once confirmed, you can delete:")
             print(f"      - data/users/ (entire directory)")
             print(f"      - data/safety.json")
-            print(f"   3. Keep data/database.db (your new database)")
         
         print("\n🎉 You're all set! Run the bot now.")
         
