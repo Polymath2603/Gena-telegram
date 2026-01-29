@@ -109,7 +109,119 @@ class AdminDashboard:
         
         return top_users
     
-    def get_error_log(self) -> list:
+    def get_all_users(self) -> list:
+        """Get all users with basic info"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT u.user_id, u.username, u.first_name, u.last_name, p.plan
+            FROM users u
+            LEFT JOIN plans p ON u.user_id = p.user_id
+            ORDER BY u.created_at DESC
+        ''')
+        
+        users = []
+        for row in cursor.fetchall():
+            users.append({
+                'user_id': row[0],
+                'username': row[1],
+                'first_name': row[2],
+                'last_name': row[3],
+                'plan': row[4] or 'Free'
+            })
+        
+        conn.close()
+        return users
+    
+    def get_user_details(self, user_id: int) -> dict:
+        """Get detailed info about a specific user"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        # Get user info
+        cursor.execute('''
+            SELECT u.user_id, u.username, u.first_name, u.last_name, u.created_at,
+                   p.plan, p.expiration,
+                   s.model, s.current_persona
+            FROM users u
+            LEFT JOIN plans p ON u.user_id = p.user_id
+            LEFT JOIN settings s ON u.user_id = s.user_id
+            WHERE u.user_id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return None
+        
+        # Get message count
+        cursor.execute('SELECT COUNT(*) FROM messages WHERE user_id = ?', (user_id,))
+        message_count = cursor.fetchone()[0]
+        
+        # Get media count
+        cursor.execute('SELECT COUNT(*) FROM media WHERE user_id = ?', (user_id,))
+        media_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'user_id': result[0],
+            'username': result[1],
+            'first_name': result[2],
+            'last_name': result[3],
+            'created_at': result[4],
+            'plan': result[5] or 'Free',
+            'expiration': result[6],
+            'model': result[7],
+            'persona': result[8],
+            'message_count': message_count,
+            'media_count': media_count
+        }
+    
+    def get_user_message_count(self, user_id: int) -> int:
+        """Get message count for specific user"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM messages WHERE user_id = ?', (user_id,))
+        count = cursor.fetchone()[0]
+        
+        conn.close()
+        return count
+    
+    def get_plan_distribution(self) -> dict:
+        """Get plan distribution"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT plan, COUNT(*) as count FROM plans
+            GROUP BY plan
+        ''')
+        
+        distribution = {row[0]: row[1] for row in cursor.fetchall()}
+        conn.close()
+        
+        return distribution
+    
+    def get_active_users(self, days: int = 7) -> int:
+        """Get count of users active in last N days"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM messages
+            WHERE created_at >= ?
+        ''', (cutoff,))
+        
+        count = cursor.fetchone()[0]
+        conn.close()
+        
+        return count
         """Get recent errors from error log"""
         error_file = self.data_dir / 'errors' / 'errors.json'
         
