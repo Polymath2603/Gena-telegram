@@ -394,7 +394,11 @@ class GenaBot:
                 await query.answer("❌ Persona not available", show_alert=True)
         
         elif data.startswith("upgrade_"):
-            plan = data.split("_")[1].capitalize()
+            plan_lower = data.split("_")[1]
+            # Map lowercase back to proper case
+            plan_map = {'basic': 'Basic', 'premium': 'Premium', 'vip': 'VIP'}
+            plan = plan_map.get(plan_lower, plan_lower.capitalize())
+            
             await self._send_invoice(query.from_user.id, plan)
             await query.answer("⭐ Invoice sent!")
         
