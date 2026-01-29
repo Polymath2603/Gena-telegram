@@ -54,8 +54,20 @@ class GenaCore:
         if not self.db.get_safety_settings():
             self.db.set_safety_settings(DEFAULT_SAFETY_SETTINGS)
     
-    def initialize_user(self, user_id: int, username: str = None, full_name: str = None) -> None:
-        self.db.init_user(user_id, username, full_name)
+    def initialize_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> None:
+        """Initialize or update user record with separate name fields"""
+        self.db.init_user(
+            user_id=user_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name
+    )
     
     def get_user_info(self, user_id: int) -> Dict:
         return self.db.get_user_info(user_id)
