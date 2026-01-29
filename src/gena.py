@@ -105,13 +105,13 @@ class GenaCore:
     def build_system_instruction(self, user_id: int, persona_key: str) -> str:
         """Build complete system instruction with persona + custom instruction"""
         user_info = self.get_user_info(user_id)
-        full_name = user_info.get('full_name') or 'friend'
+        first_name = user_info.get('first_name') or 'friend'
         
         # Base persona instruction
         instruction = get_persona_instruction(persona_key)
         
-        # Add name context
-        instruction += f"\n\nThe user's name is {full_name}. Use this name naturally in conversation."
+        # Add name context - use first name only
+        instruction += f"\n\nThe user's first name is {first_name}. Use this name naturally in conversation (not too often, just when it feels right)."
         
         # Add custom instruction if available
         if self.has_custom_instruction(user_id):

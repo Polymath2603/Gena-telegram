@@ -124,7 +124,7 @@ class GenaBot:
             return
         
         user = update.effective_user
-        self.core.initialize_user(user.id, user.username, user.full_name)
+        self.core.initialize_user(user.id, user.username, user.first_name, user.last_name)
         plan = self.core.get_user_plan(user.id)
         
         welcome = (
@@ -193,29 +193,117 @@ class GenaBot:
         dashboard = AdminDashboard(self.core.db)
         
         if not args:
+            # Full report
             report = dashboard.generate_report()
             await update.message.reply_text(f"```\n{report}\n```", parse_mode='Markdown')
+        
         elif args[0] == 'users':
-            count = self.core.db.get_total_users()
-            await update.message.reply_text(f"📊 Total users: *{count}*", parse_mode='Markdown')
+            # User statistics
+            if len(args) > 1 and args[1] == 'list':
+                # List all users with details
+                users = dashboard.get_all_users()
+                text = "*👥 All Users*\n\n"
+                for u in users[:20]:  # First 20
+                    name = u['first_name'] or 'Unknown'
+                    username = f"@{u['username']}" if u['username'] else 'No username'
+                    text += f"• `{u['user_id']}` - {name} ({username}) - Plan: *{u['plan']}*\n"
+                if len(users) > 20:
+                    text += f"\n_...and {len(users) - 20} more_"
+                await update.message.reply_text(text, parse_mode='Markdown')
+            elif len(args) > 1:
+                # Specific user details
+                try:
+                    target_id = int(args[1])
+                    user_details = dashboard.get_user_details(target_id)
+                    if user_details:
+                        text = f"*👤 User Details*\n\n"
+                        text += f"ID: `{user_details['user_id']}`\n"
+                        text += f"Name: {user_details['first_name']} {user_details['last_name'] or ''}\n"
+                        text += f"Username: @{user_details['username'] or 'none'}\n"
+                        text += f"Plan: *{user_details['plan']}*\n"
+                        if user_details['expiration']:
+                            text += f"Expires: {user_details['expiration']}\n"
+                        text += f"Messages: {user_details['message_count']}\n"
+                        text += f"Media: {user_details['media_count']}\n"
+                        text += f"Persona: {user_details['persona']}\n"
+                        text += f"Model: `{user_details['model']}`\n"
+                        text += f"Joined: {user_details['created_at']}"
+                        await update.message.reply_text(text, parse_mode='Markdown')
+                    else:
+                        await update.message.reply_text("❌ User not found")
+                except ValueError:
+                    await update.message.reply_text("❌ Invalid user ID")
+            else:
+                # User count
+                count = self.core.db.get_total_users()
+                await update.message.reply_text(f"📊 Total users: *{count}*", parse_mode='Markdown')
+        
         elif args[0] == 'messages':
-            count = self.core.db.get_total_messages()
-            await update.message.reply_text(f"💬 Total messages: *{count}*", parse_mode='Markdown')
+            # Message statistics
+            if len(args) > 1:
+                # Messages by user
+                try:
+                    target_id = int(args[1])
+                    count = dashboard.get_user_message_count(target_id)
+                    await update.message.reply_text(f"💬 User {target_id}: *{count}* messages", parse_mode='Markdown')
+                except ValueError:
+                    await update.message.reply_text("❌ Invalid user ID")
+            else:
+                # Total messages
+                count = self.core.db.get_total_messages()
+                await update.message.reply_text(f"💬 Total messages: *{count}*", parse_mode='Markdown')
+        
+        elif args[0] == 'plans':
+            # Plan distribution
+            distribution = dashboard.get_plan_distribution()
+            text = "*📊 Plan Distribution*\n\n"
+            for plan, count in distribution.items():
+                text += f"{plan}: *{count}* users\n"
+            await update.message.reply_text(text, parse_mode='Markdown')
+        
+        elif args[0] == 'active':
+            # Active users (messaged in last N days)
+            days = int(args[1]) if len(args) > 1 else 7
+            active = dashboard.get_active_users(days)
+            await update.message.reply_text(
+                f"🟢 *{active}* users active in last {days} days",
+                parse_mode='Markdown'
+            )
+        
         elif args[0] == 'export':
+            # Export analytics
             filepath = f"data/analytics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             if dashboard.export_analytics(filepath):
                 await update.message.reply_text(f"✅ Exported to `{filepath}`", parse_mode='Markdown')
             else:
                 await update.message.reply_text("❌ Export failed")
+        
+        elif args[0] == 'backup':
+            # Create database backup
+            from shutil import copy2
+            backup_path = f"data/backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            try:
+                copy2('data/database.db', backup_path)
+                await update.message.reply_text(f"✅ Backup created: `{backup_path}`", parse_mode='Markdown')
+            except Exception as e:
+                await update.message.reply_text(f"❌ Backup failed: {e}")
+        
         else:
-            await update.message.reply_text(
-                "*Admin Commands:*\n"
-                "/admin - Full report\n"
-                "/admin users - User count\n"
-                "/admin messages - Message count\n"
-                "/admin export - Export analytics",
-                parse_mode='Markdown'
+            # Help text
+            help_text = (
+                "*🔧 Admin Commands*\n\n"
+                "`/admin` - Full dashboard report\n"
+                "`/admin users` - Total user count\n"
+                "`/admin users list` - List all users\n"
+                "`/admin users <id>` - User details\n"
+                "`/admin messages` - Total messages\n"
+                "`/admin messages <id>` - User's message count\n"
+                "`/admin plans` - Plan distribution\n"
+                "`/admin active [days]` - Active users (default 7 days)\n"
+                "`/admin export` - Export analytics\n"
+                "`/admin backup` - Create database backup"
             )
+            await update.message.reply_text(help_text, parse_mode='Markdown')
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user:
@@ -223,7 +311,7 @@ class GenaBot:
         
         user = update.effective_user
         user_id = user.id
-        self.core.initialize_user(user_id, user.username, user.full_name)
+        self.core.initialize_user(user_id, user.username, user.first_name, user.last_name)
         
         if update.message.text:
             intent, extra = self.core.detect_intent(update.message.text)
