@@ -706,7 +706,7 @@ class GenaBot:
         )
     
     async def _log_error(self, user_id: int, error: Exception):
-        error_dir = Path.cwd() / 'data' / 'errors'
+        error_dir = Path.cwd() / 'data' 
         error_dir.mkdir(parents=True, exist_ok=True)
         
         import json

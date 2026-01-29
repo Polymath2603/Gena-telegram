@@ -223,7 +223,7 @@ class AdminDashboard:
         
         return count
         """Get recent errors from error log"""
-        error_file = self.data_dir / 'errors' / 'errors.json'
+        error_file = self.data_dir / 'errors.json'
         
         if not error_file.exists():
             return []
