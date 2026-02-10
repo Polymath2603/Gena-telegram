@@ -222,6 +222,8 @@ class AdminDashboard:
         conn.close()
         
         return count
+
+    def get_recent_errors(self) -> list:
         """Get recent errors from error log"""
         error_file = self.data_dir / 'errors.json'
         

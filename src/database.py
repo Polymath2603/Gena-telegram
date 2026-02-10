@@ -14,7 +14,8 @@ class DatabaseManager:
     
     def __init__(self, db_path: str = 'data/database.db'):
         self.db_path = db_path
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.db_dir = Path(db_path).parent
+        self.db_dir.mkdir(parents=True, exist_ok=True)
         self.init_db()
     
     def init_db(self):
@@ -171,6 +172,32 @@ class DatabaseManager:
                 'full_name': f"{result[1]} {result[2]}".strip() if result[1] or result[2] else None
             }
         return {'username': None, 'first_name': 'friend', 'last_name': None, 'full_name': 'friend'}
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict]:
+        """Find user by username"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Remove @ if present
+        username = username.lstrip('@')
+        
+        cursor.execute('''
+            SELECT user_id, username, first_name, last_name 
+            FROM users 
+            WHERE username IS NOT NULL AND LOWER(username) = LOWER(?)
+        ''', (username,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                'user_id': result[0],
+                'username': result[1],
+                'first_name': result[2],
+                'last_name': result[3]
+            }
+        return None
     
     def get_user_plan(self, user_id: int) -> str:
         """Get user's current plan"""
@@ -443,6 +470,22 @@ class DatabaseManager:
         count = cursor.fetchone()[0]
         conn.close()
         return count
+    
+    def delete_user_data(self, user_id: int):
+        """Delete all data for a specific user"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Delete related records
+        tables = ['messages', 'media', 'plans', 'settings', 'usage']
+        for table in tables:
+            cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+            
+        # Delete user record last
+        cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        
+        conn.commit()
+        conn.close()
     
     def get_total_messages(self) -> int:
         """Get total message count"""

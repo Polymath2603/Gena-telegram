@@ -6,6 +6,9 @@ from typing import Dict, List, Optional
 from database import DatabaseManager
 from nlu import NLUEngine
 from personas import get_available_personas, get_persona_instruction, get_persona_name
+import shutil
+import os
+from pathlib import Path
 
 # Plan configuration
 PLAN_LIMITS = {
@@ -123,14 +126,14 @@ class GenaCore:
         instruction = get_persona_instruction(persona_key)
         
         # Add name context - use first name only
-        instruction += f"\n\nThe user's first name is {first_name}. Use this name naturally in conversation (not too often, just when it feels right)."
+        instruction += f"\\n\\nThe user's first name is {first_name}. Use this name naturally in conversation (not too often, just when it feels right)."
         
         # Add custom instruction if available
         if self.has_custom_instruction(user_id):
             settings = self.get_settings(user_id)
             custom = settings.get('customInstruction', '').strip()
             if custom:
-                instruction += f"\n\nAdditional user preferences:\n{custom}"
+                instruction += f"\\n\\nAdditional user preferences:\\n{custom}"
         
         return instruction
     
@@ -222,3 +225,43 @@ class GenaCore:
             details += f"\n✨ *Free Forever*"
         
         return details
+
+    def create_backup_zip(self) -> str:
+        """Create a zip backup of the data directory"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_name = f"gena_backup_{timestamp}"
+        output_filename = f"{backup_name}.zip"
+        
+        # Create a temporary directory for the backup
+        try:
+            shutil.make_archive(backup_name, 'zip', 'data')
+            return output_filename
+        except Exception as e:
+            print(f"Backup failed: {e}")
+            return None
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict]:
+        return self.db.get_user_by_username(username)
+    
+    def delete_user_data(self, user_id: int):
+        self.db.delete_user_data(user_id)
+        
+        # Also clean up media files
+        media_dir = Path.cwd() / 'data' / 'media' / str(user_id)
+        if media_dir.exists():
+            try:
+                shutil.rmtree(media_dir)
+            except Exception as e:
+                print(f"Failed to delete media for user {user_id}: {e}")
+    
+    def get_db_path(self) -> str:
+        return self.db.db_path
+    
+    def replace_db(self, file_path: str) -> bool:
+        """Replace current database with new file"""
+        try:
+            shutil.copy2(file_path, self.db.db_path)
+            return True
+        except Exception as e:
+            print(f"DB replacement failed: {e}")
+            return False

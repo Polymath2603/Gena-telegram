@@ -107,6 +107,7 @@ class GenaBot:
         self.app.add_handler(CommandHandler('help', self.help_command))
         self.app.add_handler(CommandHandler('settings', self.settings_command))
         self.app.add_handler(CommandHandler('clear', self.clear_command))
+        self.app.add_handler(CommandHandler('delete_data', self.delete_data_command))
         self.app.add_handler(CommandHandler('admin', self.admin_command))
         
         self.app.add_handler(MessageHandler(
@@ -174,6 +175,25 @@ class GenaBot:
         await update.message.reply_text(
             "⚠️ *Forget conversation context?*\n\n"
             "(History preserved for reference) 📚",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    
+    async def delete_data_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user:
+            return
+        
+        keyboard = [[
+            InlineKeyboardButton("🔥 DELETE EVERYTHING", callback_data="delete_data_confirm"),
+            InlineKeyboardButton("❌ Cancel", callback_data="delete_data_cancel")
+        ]]
+        
+        await update.message.reply_text(
+            "⚠️ *DANGER ZONE* ⚠️\n\n"
+            "Are you sure you want to delete ALL your data?\n"
+            "• This cannot be undone.\n"
+            "• All messages, media, and settings will be wiped.\n"
+            "• You will be reset to a fresh start.",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -279,29 +299,89 @@ class GenaBot:
                 await update.message.reply_text("❌ Export failed")
         
         elif args[0] == 'backup':
-            # Create database backup
-            from shutil import copy2
-            backup_path = f"data/backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-            try:
-                copy2('data/database.db', backup_path)
-                await update.message.reply_text(f"✅ Backup created: `{backup_path}`", parse_mode='Markdown')
-            except Exception as e:
-                await update.message.reply_text(f"❌ Backup failed: {e}")
-        
+            # Create and send zip backup
+            zip_path = self.core.create_backup_zip()
+            if zip_path and os.path.exists(zip_path):
+                await update.message.reply_document(document=open(zip_path, 'rb'), filename=zip_path)
+                os.remove(zip_path) # Cleanup
+            else:
+                await update.message.reply_text("❌ Backup failed")
+
+        elif args[0] == 'export':
+             # Send database file
+             db_path = self.core.get_db_path()
+             if os.path.exists(db_path):
+                 await update.message.reply_document(document=open(db_path, 'rb'), filename="database.db")
+             else:
+                 await update.message.reply_text("❌ Database file not found")
+
+        elif args[0] == 'import':
+            # Handle import via document
+            if not update.message.reply_to_message or not update.message.reply_to_message.document:
+                 await update.message.reply_text(
+                     "⚠️ Reply to a database file with `/admin import` to restore it.\n"
+                     "Warning: This will overwrite the current database!"
+                 )
+                 return
+            
+            doc = update.message.reply_to_message.document
+            file = await doc.get_file()
+            temp_path = f"temp_import_{datetime.now().strftime('%Y%m%d%H%M%S')}.db"
+            await file.download_to_drive(temp_path)
+            
+            if self.core.replace_db(temp_path):
+                await update.message.reply_text("✅ Database imported successfully! restarting...")
+            else:
+                await update.message.reply_text("❌ detailed import failed.")
+            
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+        elif args[0] == 'plan':
+            # admin plan <id/username> <plan> [days]
+            if len(args) < 3:
+                await update.message.reply_text("Usage: `/admin plan <id|@username> <plan> [days]`")
+                return
+            
+            identifier = args[1]
+            plan = args[2]
+            days = int(args[3]) if len(args) > 3 else 30
+            
+            target_id = None
+            if identifier.isdigit():
+                target_id = int(identifier)
+            elif identifier.startswith('@'):
+                user_info = self.core.get_user_by_username(identifier)
+                if user_info:
+                    target_id = user_info['user_id']
+                else:
+                    await update.message.reply_text(f"❌ User {identifier} not found in database.")
+                    return
+            else:
+                # Try as username without @
+                user_info = self.core.get_user_by_username(identifier)
+                if user_info:
+                    target_id = user_info['user_id']
+                else:
+                    await update.message.reply_text(f"❌ Invalid identifier. Use ID or @username.")
+                    return
+            
+            if self.core.upgrade_plan(target_id, plan, days):
+                expiry = f"for {days} days" if days > 0 else "forever"
+                await update.message.reply_text(f"✅ Plan for user {target_id} updated to *{plan}* {expiry}!")
+            else:
+                await update.message.reply_text(f"❌ Invalid plan '{plan}'. Available: Free, Basic, Premium, VIP.")
+
         else:
             # Help text
             help_text = (
                 "*🔧 Admin Commands*\n\n"
                 "`/admin` - Full dashboard report\n"
-                "`/admin users` - Total user count\n"
-                "`/admin users list` - List all users\n"
-                "`/admin users <id>` - User details\n"
-                "`/admin messages` - Total messages\n"
-                "`/admin messages <id>` - User's message count\n"
-                "`/admin plans` - Plan distribution\n"
-                "`/admin active [days]` - Active users (default 7 days)\n"
-                "`/admin export` - Export analytics\n"
-                "`/admin backup` - Create database backup"
+                "`/admin users` - Stats\n"
+                "`/admin plan <id|@user> <plan> [days]` - Set/Upgrade plan\n"
+                "`/admin backup` - Download full data backup (zip)\n"
+                "`/admin export` - Download database file\n"
+                "`/admin import` - Reply to file to restore DB"
             )
             await update.message.reply_text(help_text, parse_mode='Markdown')
     
@@ -504,6 +584,13 @@ class GenaBot:
         elif data == "cancel_confirm":
             self.core.cancel_subscription(user_id)
             await query.message.edit_text("✅ Subscription cancelled. Downgraded to Free.")
+        
+        elif data == "delete_data_confirm":
+            self.core.delete_user_data(user_id)
+            await query.message.edit_text("👋 Your data has been deleted. Type /start to join again.")
+        
+        elif data == "delete_data_cancel":
+            await query.message.edit_text("👍 Deletion cancelled. Your data is safe!")
     
     async def handle_pre_checkout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.pre_checkout_query
