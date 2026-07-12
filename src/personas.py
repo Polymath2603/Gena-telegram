@@ -1,7 +1,4 @@
-"""
-Gena Persona System
-Your friend Gena with different personalities - same friend, different vibes
-"""
+"""Gena persona definitions and access control"""
 
 PERSONAS = {
     'buddy': {
